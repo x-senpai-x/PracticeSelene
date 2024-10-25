@@ -1,6 +1,6 @@
 // +build optimism
 
-package specs
+package evm
 
 import (
 	"encoding/json"

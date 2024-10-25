@@ -1,57 +1,20 @@
 package evm
 import(
-	"os"
 	"github.com/BlocSoc-iitr/selene/common"
-	Common "github.com/ethereum/go-ethereum/common"
 	"math/big"
 )
-type BlockTag = common.BlockTag
-type U256 = *big.Int
-type B256 = Common.Hash
-type Address = Common.Address
 type EvmBuilder struct {
 	context Context
 	handler Handler
-	phantom struct{} // equivalent of PhantomData in Rust
+	phantom struct{}
 }
-func DefaultEvmBuilder(isOptimismEnabled bool) EvmBuilder {
-    var handlerCfg HandlerCfg
-    if isOptimismEnabled {
-        handlerCfg = NewHandlerCfg(LATEST, true) // Set is_optimism to true
-    } else {
-        handlerCfg = NewHandlerCfg(LATEST, false)
+func NewEvmBuilder() *EvmBuilder {
+    handlerCfg := NewHandlerCfg(LATEST)
+    return &EvmBuilder{
+        context: DefaultContext(),
+        handler: Handler{Cfg: handlerCfg},
+		phantom: struct{}{},
     }
-    return EvmBuilder{
-        context: nil, // Replace with actual context initialization
-        handler: 
-        phantom: nil, 
-    }
-}
-
-func DefaultContext() Context {
-	return Context{
-		Evm: NewEvmContext(),
-		External: nil,
-	}
-}
-func NewEvmContext() EvmContext {
-	return EvmContext{
-		Inner: NewInnerEvmContext(db),
-		Precompiles: DefaultContextPrecompiles(),
-	}
-}
-func NewInnerEvmContext(db Database) InnerEvmContext {
-	return InnerEvmContext{
-		Env: *Env,
-		JournaledState: nil,
-		DB: db,
-		Error: nil,
-		ValidAuthorizations: nil,
-		L1BlockInfo: nil,
-	}
-}
-func NewEnv() *Env {
-    return new(Env) // Returns a pointer to a zero-initialized struct
 }
 func NewJournalState(spec specs.SpecId,warmPreloadedAddresses map[common.Address]struct{}) JournaledState {
 	return JournaledState{
@@ -61,7 +24,6 @@ func NewJournalState(spec specs.SpecId,warmPreloadedAddresses map[common.Address
 		Spec: spec,
 	}
 }
-
 type JournaledState struct {
 	State EvmState
 	TransientStorage TransientStorage
@@ -275,6 +237,12 @@ type Bytecode struct{
     LegacyAnalyzed *LegacyAnalyzedBytecode  // For LegacyAnalyzed variant
     Eof            *Eof 				   // For Eof variant
 }
+/*
+type Bytecode struct {
+	bytes []byte
+	// Add any additional bytecode metadata here
+}
+	*/
 //one field missing?
 type LegacyAnalyzedBytecode struct {
 	Bytecode    []byte

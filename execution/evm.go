@@ -14,13 +14,10 @@ import (
 	"github.com/BlocSoc-iitr/selene/execution/logging"
 	"github.com/ethereum/go-ethereum/params"
 )
-
 type BlockTag = common.BlockTag
 type U256 = *big.Int
 type B256 = Common.Hash
 type Address = Common.Address
-
-
 type Evm struct {
 	execution *ExecutionClient
 	chainID   uint64

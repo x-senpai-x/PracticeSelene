@@ -1,29 +1,4 @@
 package evm
-import "github.com/BlocSoc-iitr/selene/common"
-func NewHandler(cfg HandlerCfg){
-	if cfg.isOptimism{
-		Handler{
-
-		}
-	}
-}
-type HandlerCfg struct{
-	specID specs.SpecId
-	isOptimism bool
-}
-func NewHandlerCfg(specId SpecId, isOptimismEnabled bool) HandlerCfg {
-    var isOptimism bool
-    // Traditional if-else to set the isOptimism flag
-    if isOptimismEnabled {
-        isOptimism = true
-    } else {
-        isOptimism = false
-    }
-    return HandlerCfg{
-        specID:     specId,
-        isOptimism: isOptimism,
-    }
-}
 type Handler struct{
 	Cfg HandlerCfg
 	InstructionTable InstructionTables
@@ -32,4 +7,25 @@ type Handler struct{
 	PreExecution PreExecutionHandler
 	PostExecution PostExecutionHandler
 	Execution ExecutionHandler
+}
+func NewHandler(cfg HandlerCfg) Handler {
+    return createHandlerWithConfig(cfg)
+}
+func createHandlerWithConfig(cfg HandlerCfg) Handler {
+    spec := getSpecForID(cfg.specID)
+    
+    if cfg.isOptimism {
+        return createOptimismHandler(spec)
+    }
+    return createMainnetHandler(spec)
+}
+type HandlerCfg struct{
+	specID SpecId
+	isOptimism bool
+}
+func NewHandlerCfg(specID SpecId) HandlerCfg {
+    return HandlerCfg{
+        specID:     specID,
+        isOptimism: getDefaultOptimismSetting(),
+    }
 }

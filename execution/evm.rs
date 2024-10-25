@@ -6,6 +6,37 @@ convert to go lang
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, Eq, PartialEq)]
 #[non_exhaustive]
+impl<DB: Database> EvmContext<DB> {
+    /// Create new context with database.
+    pub fn new(db: DB) -> Self {
+        Self {
+            inner: InnerEvmContext::new(db),
+            precompiles: ContextPrecompiles::default(),
+        }
+    }
+    impl<DB: Database> Default for ContextPrecompiles<DB> {
+        fn default() -> Self {
+            Self {
+                inner: Default::default(),
+            }
+        }
+    }
+    impl<DB: Database> Default for PrecompilesCow<DB> {
+        fn default() -> Self {
+            Self::Owned(Default::default())
+        }
+    }
+    #[stable(feature = "rust1", since = "1.0.0")]
+impl<K, V, S> Default for HashMap<K, V, S>
+where
+    S: Default,
+{
+    /// Creates an empty `HashMap<K, V, S>`, with the `Default` value for the hasher.
+    #[inline]
+    fn default() -> HashMap<K, V, S> {
+        HashMap::with_hasher(Default::default())
+    }
+}
 pub struct CfgEnv {
     /// Chain ID of the EVM, it will be compared to the transaction's Chain ID.
     /// Chain ID is introduced EIP-155
@@ -169,13 +200,26 @@ enum PrecompilesCow<DB: Database> {
     StaticRef(&'static Precompiles),
     Owned(HashMap<Address, ContextPrecompile<DB>>),
 }
+pub enum ContextPrecompile<DB: Database> {
+    /// Ordinary precompiles
+    Ordinary(Precompile),
+    /// Stateful precompile that is Arc over [`ContextStatefulPrecompile`] trait.
+    /// It takes a reference to input, gas limit and Context.
+    ContextStateful(ContextStatefulPrecompileArc<DB>),
+    /// Mutable stateful precompile that is Box over [`ContextStatefulPrecompileMut`] trait.
+    /// It takes a reference to input, gas limit and context.
+    ContextStatefulMut(ContextStatefulPrecompileBox<DB>),
+}
+pub type ContextStatefulPrecompileArc<DB> = Arc<dyn ContextStatefulPrecompile<DB>>;
+
+/// Box over context mutable stateful precompile
+pub type ContextStatefulPrecompileBox<DB> = Box<dyn ContextStatefulPrecompileMut<DB>>;
 pub struct Precompiles {
     /// Precompiles.
     inner: HashMap<Address, Precompile>,
     /// Addresses of precompile.
     addresses: HashSet<Address>,
 }
-
 pub enum Precompile {
     /// Standard simple precompile that takes input and gas limit.
     Standard(StandardPrecompileFn),
@@ -191,8 +235,6 @@ pub enum Precompile {
 pub type StandardPrecompileFn = fn(&Bytes, u64) -> PrecompileResult;
 pub type EnvPrecompileFn = fn(&Bytes, u64, env: &Env) -> PrecompileResult;
 
-/// Stateful precompile trait. It is used to create
-/// a arc precompile Precompile::Stateful.
 pub trait StatefulPrecompile: Sync + Send {
     fn call(&self, bytes: &Bytes, gas_limit: u64, env: &Env) -> PrecompileResult;
 }
@@ -202,6 +244,50 @@ pub trait StatefulPrecompile: Sync + Send {
 pub trait StatefulPrecompileMut: DynClone + Send + Sync {
     fn call_mut(&mut self, bytes: &Bytes, gas_limit: u64, env: &Env) -> PrecompileResult;
 }
+
+dyn_clone::clone_trait_object!(StatefulPrecompileMut);
+
+/// Arc over stateful precompile.
+pub type StatefulPrecompileArc = Arc<dyn StatefulPrecompile>;
+
+/// Box over mutable stateful precompile
+pub type StatefulPrecompileBox = Box<dyn StatefulPrecompileMut>;
+pub type PrecompileResult = Result<PrecompileOutput, PrecompileErrors>;
+pub struct PrecompileOutput {
+    /// Gas used by the precompile.
+    pub gas_used: u64,
+    /// Output bytes.
+    pub bytes: Bytes,
+}
+pub enum PrecompileErrors {
+    Error(PrecompileError),
+    Fatal { msg: String },
+}
+pub enum PrecompileError {
+    /// out of gas is the main error. Others are here just for completeness
+    OutOfGas,
+    // Blake2 errors
+    Blake2WrongLength,
+    Blake2WrongFinalIndicatorFlag,
+    // Modexp errors
+    ModexpExpOverflow,
+    ModexpBaseOverflow,
+    ModexpModOverflow,
+    // Bn128 errors
+    Bn128FieldPointNotAMember,
+    Bn128AffineGFailedToCreate,
+    Bn128PairLength,
+    // Blob errors
+    /// The input length is not exactly 192 bytes.
+    BlobInvalidInputLength,
+    /// The commitment does not match the versioned hash.
+    BlobMismatchedVersion,
+    /// The proof verification failed.
+    BlobVerifyKzgProofFailed,
+    /// Catch-all variant for other errors.
+    Other(String),
+}
+
 pub struct InnerEvmContext<DB: Database> {
     /// EVM Environment contains all the information about config, block and transaction that
     /// evm needs.

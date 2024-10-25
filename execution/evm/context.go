@@ -1,11 +1,28 @@
 package evm
+import (
+	"encoding/json"
+	"fmt"
+	"sync"
+)
 type Context struct {
 	Evm EvmContext
 	External interface{}
 }
+func DefaultContext() Context {
+	return Context{
+		Evm: NewEvmContext(),
+		External: nil,
+	}
+}
 type EvmContext struct {
 	Inner InnerEvmContext
 	Precompiles ContextPrecompiles
+}
+func NewEvmContext() EvmContext {
+	return EvmContext{
+		Inner: NewInnerEvmContext(db),
+		Precompiles: DefaultContextPrecompiles(),
+	}
 }
 type InnerEvmContext struct {
     Env                    *Env
@@ -15,83 +32,124 @@ type InnerEvmContext struct {
     ValidAuthorizations    []Address
     L1BlockInfo           *L1BlockInfo // For optimism feature
 }
-type Env struct{
-    cfg CfgEnv
-    block BlockEnv
-    tx TxEnv
+//To be reviewed
+func NewInnerEvmContext(db Database) InnerEvmContext {
+	return InnerEvmContext{
+		Env: NewEnv(),
+		JournaledState: nil,//to be changed
+		DB: db,
+		Error: nil,
+		ValidAuthorizations: nil,
+		L1BlockInfo: nil,
+	}
 }
-type CfgEnv struct {
-	ChainID                       uint64         `json:"chain_id"`
-	KzgSettings                   *EnvKzgSettings `json:"kzg_settings,omitempty"`
-	PerfAnalyseCreatedBytecodes    AnalysisKind   `json:"perf_analyse_created_bytecodes"`
-	LimitContractCodeSize         *uint64        `json:"limit_contract_code_size,omitempty"`
-	MemoryLimit                   uint64         `json:"memory_limit,omitempty"` // Consider using a pointer if optional
-	DisableBalanceCheck           bool           `json:"disable_balance_check,omitempty"`
-	DisableBlockGasLimit          bool           `json:"disable_block_gas_limit,omitempty"`
-	DisableEIP3607                bool           `json:"disable_eip3607,omitempty"`
-	DisableGasRefund               bool           `json:"disable_gas_refund,omitempty"`
-	DisableBaseFee                bool           `json:"disable_base_fee,omitempty"`
-	DisableBeneficiaryReward      bool           `json:"disable_beneficiary_reward,omitempty"`
+type ContextPrecompiles struct {
+	Inner PrecompilesCow
 }
-type BlockEnv struct {
-	Number                  U256                       `json:"number"`
-	Coinbase                Address                    `json:"coinbase"`
-	Timestamp               U256                       `json:"timestamp"`
-	GasLimit                U256                       `json:"gas_limit"`
-	BaseFee                 U256                       `json:"basefee"`
-	Difficulty              U256                       `json:"difficulty"`
-	Prevrandao              *B256                      `json:"prevrandao,omitempty"`
-	BlobExcessGasAndPrice   *BlobExcessGasAndPrice    `json:"blob_excess_gas_and_price,omitempty"`
-}
-type BlobExcessGasAndPrice struct {
-	ExcessGas   uint64 `json:"excess_gas"`
-	BlobGasPrice uint64 `json:"blob_gas_price"`
+func NewContextPrecompiles() *ContextPrecompiles {
+	return &ContextPrecompiles{
+		Inner: 
+	}
 }
 
-// EnvKzgSettings defines the KZG settings used in the environment.
-type EnvKzgSettings struct {
-	Mode   string                `json:"mode"`
-	Custom *KzgSettings          `json:"custom,omitempty"`
+type PrecompilesCow struct {
+	isStatic bool
+	StaticRef *Precompiles
+	Owned     map[Address]ContextPrecompile
 }
+func NewPrecompilesCow () PrecompilesCow{
+	return PrecompilesCow{
+		Owned: make(map[Address]ContextPrecompile),
+	}
 
-// KzgSettings represents custom KZG settings.
-type KzgSettings struct {
-	// Define fields for KzgSettings based on your requirements.
 }
-
-// AnalysisKind represents the type of analysis for created bytecodes.
-type AnalysisKind int
-
+type Precompiles struct {
+	Inner map[Address]Precompile
+	Addresses map[Address]struct{}
+}
+type Precompile struct {
+	precompileType string // "Standard", "Env", "Stateful", or "StatefulMut"
+	standard       StandardPrecompileFn
+	env           EnvPrecompileFn
+	stateful      *StatefulPrecompileArc
+	statefulMut   *StatefulPrecompileBox
+}
+type StandardPrecompileFn func(input *Bytes, gasLimit uint64) PrecompileResult
+type EnvPrecompileFn func(input *Bytes, gasLimit uint64, env *Env) PrecompileResult
+type StatefulPrecompile interface {
+	Call(bytes *Bytes, gasLimit uint64, env *Env) PrecompileResult
+}
+type StatefulPrecompileMut interface {
+	CallMut(bytes *Bytes, gasLimit uint64, env *Env) PrecompileResult
+	Clone() StatefulPrecompileMut
+}
+//Doubt
+type StatefulPrecompileArc struct {
+	sync.RWMutex
+	impl StatefulPrecompile
+}
+// StatefulPrecompileBox is a mutable reference to a StatefulPrecompileMut
+type StatefulPrecompileBox struct {
+	impl StatefulPrecompileMut
+}
+type ContextPrecompile struct {
+	precompileType string // "Ordinary", "ContextStateful", or "ContextStatefulMut"
+	ordinary       *Precompile
+	contextStateful      *ContextStatefulPrecompileArc
+	contextStatefulMut   *ContextStatefulPrecompileBox
+}
+// ContextStatefulPrecompileArc is a thread-safe reference to a ContextStatefulPrecompile
+type ContextStatefulPrecompileArc struct {
+	sync.RWMutex
+	impl ContextStatefulPrecompile
+}
+// ContextStatefulPrecompileBox is a mutable reference to a ContextStatefulPrecompileMut
+type ContextStatefulPrecompileBox struct {
+	impl ContextStatefulPrecompileMut       
+}
+type ContextStatefulPrecompile interface {
+	Call(bytes *Bytes, gasLimit uint64, evmCtx *InnerEvmContext) PrecompileResult
+}
+// ContextStatefulPrecompileMut interface for mutable stateful precompiles with context
+type ContextStatefulPrecompileMut interface {
+	CallMut(bytes *Bytes, gasLimit uint64, evmCtx *InnerEvmContext) PrecompileResult
+	Clone() ContextStatefulPrecompileMut
+}
+type PrecompileResult struct {
+	output *PrecompileOutput
+	err    PrecompileError//Doubt
+}
+type PrecompileOutput struct {
+	GasUsed uint64
+	Bytes   []byte
+}
+type PrecompileError struct {
+	errorType string
+	message   string
+}
 const (
-	Raw AnalysisKind = iota
-	Analyse
+	ErrorOutOfGas                  = "OutOfGas"
+	ErrorBlake2WrongLength         = "Blake2WrongLength"
+	ErrorBlake2WrongFinalFlag      = "Blake2WrongFinalIndicatorFlag"
+	ErrorModexpExpOverflow         = "ModexpExpOverflow"
+	ErrorModexpBaseOverflow        = "ModexpBaseOverflow"
+	ErrorModexpModOverflow         = "ModexpModOverflow"
+	ErrorBn128FieldPointNotMember  = "Bn128FieldPointNotAMember"
+	ErrorBn128AffineGFailedCreate  = "Bn128AffineGFailedToCreate"
+	ErrorBn128PairLength           = "Bn128PairLength"
+	ErrorBlobInvalidInputLength    = "BlobInvalidInputLength"
+	ErrorBlobMismatchedVersion     = "BlobMismatchedVersion"
+	ErrorBlobVerifyKzgProofFailed  = "BlobVerifyKzgProofFailed"
+	ErrorOther                     = "Other"
 )
 
-// MarshalJSON customizes the JSON marshalling for AnalysisKind.
-func (ak AnalysisKind) MarshalJSON() ([]byte, error) {
-	switch ak {
-	case Raw:
-		return json.Marshal("raw")
-	case Analyse:
-		return json.Marshal("analyse")
-	default:
-		return json.Marshal("unknown")
+// Error implementation for PrecompileError
+func (e PrecompileError) Error() string {
+	if e.message != "" {
+		return e.message
 	}
+	return e.errorType
 }
 
-// UnmarshalJSON customizes the JSON unmarshalling for AnalysisKind.
-func (ak *AnalysisKind) UnmarshalJSON(data []byte) error {
-	var s string
-	if err := json.Unmarshal(data, &s); err != nil {
-		return err
-	}
-	switch s {
-	case "raw":
-		*ak = Raw
-	case "analyse":
-		*ak = Analyse
-	default:
-		return fmt.Errorf("unknown AnalysisKind: %s", s)
-	}
-	return nil
-}
+
+

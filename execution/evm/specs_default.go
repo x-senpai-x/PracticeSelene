@@ -1,6 +1,6 @@
 // +build !optimism
 
-package specs
+package evm
 
 import (
 	"encoding/json"
@@ -33,7 +33,6 @@ const (
 	PRAGUE_EOF       SpecId = 19 // Praque+EOF             TBD
 	LATEST           SpecId = 255 // Latest (u8::MAX)
 )
-
 // MarshalJSON implements the json.Marshaler interface for SpecId.
 func (s SpecId) MarshalJSON() ([]byte, error) {
 	return json.Marshal(uint8(s))
