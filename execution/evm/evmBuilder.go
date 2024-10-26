@@ -13,6 +13,7 @@ type EvmBuilder[EXT interface{}, DB Database] struct {
 	phantom struct{}
 
 }
+
 /*
 type EvmBuilder struct {
 	context Context
@@ -46,6 +47,14 @@ func (eb EvmBuilder[EXT, DB]) WithContextWithHandlerCfg(contextWithHandlerCfg Co
 		context: contextWithHandlerCfg.Context,
 		handler: Handler{Cfg: contextWithHandlerCfg.Cfg},
 		phantom: struct{}{},
+	}
+}
+func NewAccountInfo(balance U256, nonce uint64, codeHash B256, code Bytecode) AccountInfo {
+	return AccountInfo{
+		Balance:  balance,
+		Nonce:    nonce,
+		CodeHash: codeHash,
+		Code:     &code,
 	}
 }
 type EvmState map [common.Address]Account
