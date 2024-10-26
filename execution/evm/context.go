@@ -20,24 +20,6 @@ func NewContext[EXT interface{}, DB Database](evm EvmContext [DB], external EXT)
         External: external,
     }
 }
-type EvmContext[DB Database] struct {
-	Inner InnerEvmContext [DB]
-	Precompiles ContextPrecompiles
-}
-func NewEvmContext[DB Database](db DB) EvmContext[DB] {
-	return EvmContext[DB]{
-		Inner: NewInnerEvmContext(db),
-		Precompiles: DefaultContextPrecompiles(),
-	}
-}
-type InnerEvmContext[DB Database] struct {
-    Env                    *Env
-    JournaledState        JournaledState
-    DB                     Database
-    Error                  error
-    ValidAuthorizations    []Address
-    L1BlockInfo           *L1BlockInfo // For optimism feature
-}
 func (js JournaledState) SetSpecId(SpecId){
 	js.Spec=SpecId
 }

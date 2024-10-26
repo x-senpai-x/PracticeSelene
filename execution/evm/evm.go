@@ -66,7 +66,7 @@ func (e *Evm) TransactPreverifiedInner(initialGasSpend uint64) (EvmResult, Datab
 
 	err := preExec.LoadAccounts(ctx)
 
-	precompiles := preExec.LoadPrecompiles()
+	precompiles := preExec.LoadPrecompilesFunction()
 	ctx.Evm.SetPrecompiles(precompiles)
 
 	err = preExec.DeductCaller(ctx)
@@ -110,7 +110,7 @@ func (e *Evm) RunTheLoop(firstFrame Frame) (FrameResult, DatabaseError) {
 
 // type TxKind struct {
 // 	Create string
-// 	Call   *common.Address
+// 	Call   *common.Address.
 // }
 
 func (s SpecId) IsEnabledIn(spec SpecId) bool {
