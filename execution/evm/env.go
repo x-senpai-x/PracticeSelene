@@ -1,10 +1,11 @@
 package evm
 
 import (
-    "crypto/ecdsa"
-    "crypto/elliptic"
-    "fmt"
-    "math/big"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"encoding/json"
+	"fmt"
+	"math/big"
 )
 
 // Signature represents an ECDSA signature consisting of V, R, and S values
