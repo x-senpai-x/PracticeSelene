@@ -4,7 +4,6 @@ import (
 	"log"
 	"math/big"
 	"sync"
-
 	Common "github.com/ethereum/go-ethereum/common" //geth common imported as Common
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core"
@@ -88,7 +87,6 @@ func (e *Evm) callInner(opts *CallOpts) (*evm.ExecutionResult, error) {
 	//ctx:=evm.IntoContextWithHandlerCfg[interface{}, ProofDB](evm)
 	for {
 		db:=ctx.Context.Evm.Inner.DB
-		if db.
 		if db.State.NeedsUpdate() {
 			if err := db.State.UpdateState(); err != nil {
 				return nil, err
@@ -165,37 +163,19 @@ func (e *Evm) getEnv( opts *CallOpts, tag BlockTag) evm.Env {
 	return env
 }
 type ProofDB struct {
-	State *EvmState
+	State EvmState
 }
-
 func NewProofDB( tag BlockTag, execution *ExecutionClient) (*ProofDB, error) {
 	state := NewEvmState(execution, tag)
 	return &ProofDB{
-		State: state,
+		State: *state,
 	}, nil
 }
-
 type StateAccess struct {
 	Basic     *Address
 	BlockHash *uint64
 	Storage   map[Address]U256
 }
-type AccountInfo struct {
-	Balance  U256
-	Nonce    uint64
-	CodeHash B256
-	Code     hexutil.Bytes //Doubtful
-}
-
-func NewAccountInfo(balance U256, nonce uint64, codeHash B256, code hexutil.Bytes) AccountInfo {
-	return AccountInfo{
-		Balance:  balance,
-		Nonce:    nonce,
-		CodeHash: codeHash,
-		Code:     code,
-	}
-}
-
 type EvmState struct {
 	Basic      map[Address]evm.AccountInfo
 	BlockHash  map[uint64]B256
@@ -203,8 +183,8 @@ type EvmState struct {
 	Block      BlockTag
 	Access     *StateAccess
 	Execution  *ExecutionClient
-	AccessList map[Address]struct{}
-} //added just now : UPDATE
+	//AccessList map[Address]struct{}
+}
 func NewEvmState(execution *ExecutionClient, block BlockTag) *EvmState {
 	return &EvmState{
 		Basic:      make(map[Address]evm.AccountInfo),
@@ -213,8 +193,12 @@ func NewEvmState(execution *ExecutionClient, block BlockTag) *EvmState {
 		Block:      block,
 		Access:     nil,
 		Execution:  execution,
-		AccessList: make(map[Address]struct{}), //added just now : UPDATE
+		//AccessList: make(map[Address]struct{}), //added just now : UPDATE
 	}
+}
+type AccessListItem struct {
+	Address     Address //I used Common here instead of common
+	StorageKeys []B256
 }
 func (e *EvmState) UpdateState() error {
 	if e.Access == nil {
@@ -372,28 +356,8 @@ func (e *EvmState) PrefetchState( opts *CallOpts) error {
 	}
 	return nil
 }
-
-type AccessListItem struct {
-	Address     Address //I used Common here instead of common
-	StorageKeys []B256
-}
-type Bytecode []byte
-
-func NewBytecodeRaw(code []byte) hexutil.Bytes {
-	return hexutil.Bytes(code)
-}
-func B256FromSlice(slice []byte) Common.Hash {
-	return Common.BytesToHash(slice)
-}
-func ConvertU256(value *big.Int) *big.Int {
-	valueSlice := make([]byte, 32)
-	value.FillBytes(valueSlice)
-	result := new(big.Int).SetBytes(valueSlice)
-	return result
-}
-
 type Database interface {
-	Basic(address Address) (AccountInfo, error)
+	Basic(address Address) (evm.AccountInfo, error)
 	BlockHash(number uint64) (B256, error)
 	Storage(address Address, slot *big.Int) (*big.Int, error)
 	CodeByHash(codeHash B256) (Bytecode, error)
@@ -424,8 +388,39 @@ func isPrecompile(address Address) bool {
 	precompileAddress := Address{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x09}
 	return address.Cmp(precompileAddress) <= 0 && address.Cmp(Address{}) > 0
 }
+type Bytecode []byte
+
+func NewBytecodeRaw(code []byte) hexutil.Bytes {
+	return hexutil.Bytes(code)
+}
+func B256FromSlice(slice []byte) Common.Hash {
+	return Common.BytesToHash(slice)
+}
+func ConvertU256(value *big.Int) *big.Int {
+	valueSlice := make([]byte, 32)
+	value.FillBytes(valueSlice)
+	result := new(big.Int).SetBytes(valueSlice)
+	return result
+}
 
 
+/*
+type AccountInfo struct {
+	Balance  U256
+	Nonce    uint64
+	CodeHash B256
+	Code     hexutil.Bytes //Doubtful
+}
+
+func NewAccountInfo(balance U256, nonce uint64, codeHash B256, code hexutil.Bytes) AccountInfo {
+	return AccountInfo{
+		Balance:  balance,
+		Nonce:    nonce,
+		CodeHash: codeHash,
+		Code:     code,
+	}
+}
+*/
 //Skipped the testing for now
 //Proposal: We should be using geth Address instead of locally defined address in common/types.go in the entire codebase
 /*package execution

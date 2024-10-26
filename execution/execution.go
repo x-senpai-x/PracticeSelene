@@ -7,8 +7,8 @@ import (
 
 	"errors"
 
-	seleneCommon "github.com/18aaddy/selene-practics/common"
-	"github.com/18aaddy/selene-practics/utils"
+	seleneCommon "github.com/x-senpai-x/PracticeSelene/common"
+	"github.com/x-senpai-x/PracticeSelene/utils"
 	"github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
