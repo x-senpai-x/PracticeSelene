@@ -1,92 +1,99 @@
 package evm
+
 import (
 	// "encoding/json"
 	// "fmt"
 	"sync"
 )
+
 type Context[EXT interface{}, DB Database] struct {
-	Evm EvmContext [DB]
+	Evm      EvmContext[DB]
 	External interface{}
 }
+
 func DefaultContext[EXT interface{}, DB Database](db DB) Context[EXT, DB] {
-    return Context[EXT, DB]{
-        Evm:     NewEvmContext(db),
-        External: nil,
-    }
+	return Context[EXT, DB]{
+		Evm:      NewEvmContext(db),
+		External: nil,
+	}
 }
-func NewContext[EXT interface{}, DB Database](evm EvmContext [DB], external EXT) Context[EXT, DB] {
-    return Context[EXT, DB]{
-        Evm:     evm,
-        External: external,
-    }
+func NewContext[EXT interface{}, DB Database](evm EvmContext[DB], external EXT) Context[EXT, DB] {
+	return Context[EXT, DB]{
+		Evm:      evm,
+		External: external,
+	}
 }
-func (js JournaledState) SetSpecId(SpecId){
-	js.Spec=SpecId
+func (js JournaledState) SetSpecId(SpecId) {
+	js.Spec = SpecId
 }
-//To be reviewed
+
+// To be reviewed
 func NewInnerEvmContext[DB Database](db DB) InnerEvmContext[DB] {
-	env := NewEnv()
 	return InnerEvmContext[DB]{
-		Env: env,
-		JournaledState: nil,//to be changed
-		DB: db,
-		Error: nil,
+		Env:                 NewEnv(),
+		JournaledState:      JournaledState{Spec: LATEST, WarmPreloadedAddresses: make(map[Address]struct{})},
+		Error:               nil,
 		ValidAuthorizations: nil,
-		L1BlockInfo: nil,
+		L1BlockInfo:         nil,
 	}
 }
-func (c EvmContext)WithDB(db Database) EvmContext{
-	return EvmContext{
-		Inner: c.Inner.WithDB(db),
-		Precompiles: DefaultContextPrecompiles(),
+func (c EvmContext[DB]) WithDB(db Database) EvmContext[DB] {
+	return EvmContext[DB]{
+		Inner:       c.Inner.WithDB(db),
+		Precompiles: DefaultContextPrecompiles[DB](),
 	}
 }
-func (inner InnerEvmContext)WithDB(db Database) InnerEvmContext{
-	return InnerEvmContext{
-		Env: inner.Env,
-		JournaledState: inner.JournaledState,
-		DB: db,
-		Error: inner.Error,
+func (inner InnerEvmContext[DB]) WithDB(db Database) InnerEvmContext[DB] {
+	return InnerEvmContext[DB]{
+		Env:                 inner.Env,
+		JournaledState:      inner.JournaledState,
+		DB:                  db,
+		Error:               inner.Error,
 		ValidAuthorizations: nil,
-		L1BlockInfo: inner.L1BlockInfo,
+		L1BlockInfo:         inner.L1BlockInfo,
 	}
 }
+
 type L1BlockInfo struct {
-	L1BaseFee U256
-	L1FeeOverhead *U256
-	L1BaseFeeScalar U256
-	L1BlobBaseFee *U256
+	L1BaseFee           U256
+	L1FeeOverhead       *U256
+	L1BaseFeeScalar     U256
+	L1BlobBaseFee       *U256
 	L1BlobBaseFeeScalar *U256
-	EmptyScalars bool
+	EmptyScalars        bool
 }
 type ContextPrecompiles[DB Database] struct {
-	Inner PrecompilesCow
+	Inner PrecompilesCow[DB]
 }
-func DefaultContextPrecompiles() ContextPrecompiles {
-	return ContextPrecompiles{
-		Inner: NewPrecompilesCow(),
+
+func DefaultContextPrecompiles[DB Database]() ContextPrecompiles[DB] {
+	return ContextPrecompiles[DB]{
+		Inner: NewPrecompilesCow[DB](),
 	}
 }
-type PrecompilesCow struct {
-	isStatic bool
+
+type PrecompilesCow[DB Database] struct {
+	isStatic  bool
 	StaticRef *Precompiles
-	Owned     map[Address]ContextPrecompile
+	Owned     map[Address]ContextPrecompile[DB]
 }
-func NewPrecompilesCow () PrecompilesCow{
-	return PrecompilesCow{
-		Owned: make(map[Address]ContextPrecompile),
+
+func NewPrecompilesCow[DB Database]() PrecompilesCow[DB] {
+	return PrecompilesCow[DB]{
+		Owned: make(map[Address]ContextPrecompile[DB]),
 	}
 }
+
 type Precompiles struct {
-	Inner map[Address]Precompile
+	Inner     map[Address]Precompile
 	Addresses map[Address]struct{}
 }
 type Precompile struct {
 	precompileType string // "Standard", "Env", "Stateful", or "StatefulMut"
 	standard       StandardPrecompileFn
-	env           EnvPrecompileFn
-	stateful      *StatefulPrecompileArc
-	statefulMut   *StatefulPrecompileBox
+	env            EnvPrecompileFn
+	stateful       *StatefulPrecompileArc
+	statefulMut    *StatefulPrecompileBox
 }
 type StandardPrecompileFn func(input *Bytes, gasLimit uint64) PrecompileResult
 type EnvPrecompileFn func(input *Bytes, gasLimit uint64, env *Env) PrecompileResult
@@ -97,41 +104,46 @@ type StatefulPrecompileMut interface {
 	CallMut(bytes *Bytes, gasLimit uint64, env *Env) PrecompileResult
 	Clone() StatefulPrecompileMut
 }
-//Doubt
+
+// Doubt
 type StatefulPrecompileArc struct {
 	sync.RWMutex
 	impl StatefulPrecompile
 }
+
 // StatefulPrecompileBox is a mutable reference to a StatefulPrecompileMut
 type StatefulPrecompileBox struct {
 	impl StatefulPrecompileMut
 }
-type ContextPrecompile struct {
-	precompileType string // "Ordinary", "ContextStateful", or "ContextStatefulMut"
-	ordinary       *Precompile
-	contextStateful      *ContextStatefulPrecompileArc
-	contextStatefulMut   *ContextStatefulPrecompileBox
+type ContextPrecompile[DB Database] struct {
+	precompileType     string // "Ordinary", "ContextStateful", or "ContextStatefulMut"
+	ordinary           *Precompile
+	contextStateful    *ContextStatefulPrecompileArc[DB]
+	contextStatefulMut *ContextStatefulPrecompileBox[DB]
 }
+
 // ContextStatefulPrecompileArc is a thread-safe reference to a ContextStatefulPrecompile
-type ContextStatefulPrecompileArc struct {
+type ContextStatefulPrecompileArc[DB Database] struct {
 	sync.RWMutex
-	impl ContextStatefulPrecompile
+	impl ContextStatefulPrecompile[DB]
 }
+
 // ContextStatefulPrecompileBox is a mutable reference to a ContextStatefulPrecompileMut
-type ContextStatefulPrecompileBox struct {
-	impl ContextStatefulPrecompileMut       
+type ContextStatefulPrecompileBox[DB Database] struct {
+	impl ContextStatefulPrecompileMut[DB]
 }
-type ContextStatefulPrecompile interface {
-	Call(bytes *Bytes, gasLimit uint64, evmCtx *InnerEvmContext) PrecompileResult
+type ContextStatefulPrecompile[DB Database] interface {
+	Call(bytes *Bytes, gasLimit uint64, evmCtx *InnerEvmContext[DB]) PrecompileResult
 }
+
 // ContextStatefulPrecompileMut interface for mutable stateful precompiles with context
-type ContextStatefulPrecompileMut interface {
-	CallMut(bytes *Bytes, gasLimit uint64, evmCtx *InnerEvmContext) PrecompileResult
-	Clone() ContextStatefulPrecompileMut
+type ContextStatefulPrecompileMut[DB Database] interface {
+	CallMut(bytes *Bytes, gasLimit uint64, evmCtx *InnerEvmContext[DB]) PrecompileResult
+	Clone() ContextStatefulPrecompileMut[DB]
 }
 type PrecompileResult struct {
 	output *PrecompileOutput
-	err    PrecompileErrorStruct//Doubt
+	err    PrecompileErrorStruct //Doubt
 }
 type PrecompileOutput struct {
 	GasUsed uint64
@@ -141,20 +153,21 @@ type PrecompileErrorStruct struct {
 	errorType string
 	message   string
 }
+
 const (
-	ErrorOutOfGas                  = "OutOfGas"
-	ErrorBlake2WrongLength         = "Blake2WrongLength"
-	ErrorBlake2WrongFinalFlag      = "Blake2WrongFinalIndicatorFlag"
-	ErrorModexpExpOverflow         = "ModexpExpOverflow"
-	ErrorModexpBaseOverflow        = "ModexpBaseOverflow"
-	ErrorModexpModOverflow         = "ModexpModOverflow"
-	ErrorBn128FieldPointNotMember  = "Bn128FieldPointNotAMember"
-	ErrorBn128AffineGFailedCreate  = "Bn128AffineGFailedToCreate"
-	ErrorBn128PairLength           = "Bn128PairLength"
-	ErrorBlobInvalidInputLength    = "BlobInvalidInputLength"
-	ErrorBlobMismatchedVersion     = "BlobMismatchedVersion"
-	ErrorBlobVerifyKzgProofFailed  = "BlobVerifyKzgProofFailed"
-	ErrorOther                     = "Other"
+	ErrorOutOfGas                 = "OutOfGas"
+	ErrorBlake2WrongLength        = "Blake2WrongLength"
+	ErrorBlake2WrongFinalFlag     = "Blake2WrongFinalIndicatorFlag"
+	ErrorModexpExpOverflow        = "ModexpExpOverflow"
+	ErrorModexpBaseOverflow       = "ModexpBaseOverflow"
+	ErrorModexpModOverflow        = "ModexpModOverflow"
+	ErrorBn128FieldPointNotMember = "Bn128FieldPointNotAMember"
+	ErrorBn128AffineGFailedCreate = "Bn128AffineGFailedToCreate"
+	ErrorBn128PairLength          = "Bn128PairLength"
+	ErrorBlobInvalidInputLength   = "BlobInvalidInputLength"
+	ErrorBlobMismatchedVersion    = "BlobMismatchedVersion"
+	ErrorBlobVerifyKzgProofFailed = "BlobVerifyKzgProofFailed"
+	ErrorOther                    = "Other"
 )
 
 // Error implementation for PrecompileError
@@ -165,9 +178,7 @@ func (e PrecompileErrorStruct) Error() string {
 	return e.errorType
 }
 
-
-
 type ContextWithHandlerCfg[EXT interface{}, DB Database] struct {
 	Context Context[EXT, DB]
-	Cfg HandlerCfg
+	Cfg     HandlerCfg
 }

@@ -7,7 +7,7 @@ type EvmContext[DB Database] struct {
 func NewEvmContext[DB Database](db DB) EvmContext[DB] {
 	return EvmContext[DB]{
 		Inner: NewInnerEvmContext(db),
-		Precompiles: DefaultContextPrecompiles(),
+		Precompiles: DefaultContextPrecompiles[DB](),
 	}
 }
 type InnerEvmContext[DB Database] struct {

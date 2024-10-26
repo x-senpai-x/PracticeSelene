@@ -1,8 +1,8 @@
 package evm
 
-type LoadPrecompilesHandle[DB Database] func() ContextPrecompiles
-type LoadAccountsHandle[EXT any, DB Database] func(ctx *Context) error
-type DeductCallerHandle[EXT any, DB Database] func(ctx *Context)
+type LoadPrecompilesHandle[DB Database] func() ContextPrecompiles[DB]
+type LoadAccountsHandle[EXT any, DB Database] func(ctx *Context[EXT, DB]) error
+type DeductCallerHandle[EXT any, DB Database] func(ctx *Context[EXT, DB])
 
 type PreExecutionHandler[EXT any, DB Database] struct {
 	LoadPrecompiles LoadPrecompilesHandle[DB]
@@ -10,6 +10,6 @@ type PreExecutionHandler[EXT any, DB Database] struct {
 	DeductCaller    DeductCallerHandle[EXT, DB]
 }
 
-func (p *PreExecutionHandler[EXT, DB]) LoadPrecompilesFunction() ContextPrecompiles {
+func (p *PreExecutionHandler[EXT, DB]) LoadPrecompilesFunction() ContextPrecompiles[DB] {
 	return p.LoadPrecompiles()
 }

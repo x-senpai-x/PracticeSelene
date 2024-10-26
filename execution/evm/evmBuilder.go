@@ -7,9 +7,9 @@ import (
 
 	"github.com/BlocSoc-iitr/selene/common"
 )
-type EvmBuilder[EXT interface, DB Database] struct {
-    context *Context[Ext, DB]
-    handler *Handler[Ext, DB]
+type EvmBuilder[EXT interface{}, DB Database] struct {
+    context Context[EXT, DB]
+    handler Handler[EXT, DB]
 	phantom struct{}
 
 }
@@ -19,30 +19,30 @@ type EvmBuilder struct {
 	handler Handler
 	phantom struct{}
 }*/
-func NewEvmBuilder() *EvmBuilder {
+func NewEvmBuilder[EXT interface{}, DB Database](db DB) *EvmBuilder[EXT, DB] {
     handlerCfg := NewHandlerCfg(LATEST)
-    return &EvmBuilder{
-        context: DefaultContext(),
+    return &EvmBuilder[EXT, DB]{
+        context: DefaultContext[EXT, DB](db),
         handler: Handler{Cfg: handlerCfg},
 		phantom: struct{}{},
     }
 }
-func (eb EvmBuilder) WithDB(db Database) *EvmBuilder {
-	return &EvmBuilder{
-		context : NewContext(eb.context.Evm.WithDB(db), eb.context.External),
+func (eb EvmBuilder[EXT, DB]) WithDB(db Database) *EvmBuilder[EXT,DB] {
+	return &EvmBuilder[EXT,DB]{
+		context : NewContext[EXT, DB](eb.context.Evm.WithDB(db), eb.context.External.(EXT)),//Doubt
 		handler : Handler{Cfg:eb.handler.Cfg},//Doubt
 		phantom : struct{}{},
 	}
 }
-func (eb *EvmBuilder) WithEnv(env *Env) *EvmBuilder {
+func (eb *EvmBuilder[EXT, DB]) WithEnv(env *Env) *EvmBuilder[EXT, DB] {
 	eb.context.Evm.Inner.Env=env
 	return eb
 }
-func (eb *EvmBuilder) Build() Evm {
+func (eb *EvmBuilder[EXT, DB]) Build() Evm {
 	return NewEvm(eb.context,eb.handler)
 }
-func (eb EvmBuilder) WithContextWithHandlerCfg(contextWithHandlerCfg ContextWithHandlerCfg) *EvmBuilder {
-	return &EvmBuilder{
+func (eb EvmBuilder[EXT, DB]) WithContextWithHandlerCfg(contextWithHandlerCfg ContextWithHandlerCfg[EXT, DB]) *EvmBuilder[EXT, DB] {
+	return &EvmBuilder[EXT, DB]{
 		context: contextWithHandlerCfg.Context,
 		handler: Handler{Cfg: contextWithHandlerCfg.Cfg},
 		phantom: struct{}{},
