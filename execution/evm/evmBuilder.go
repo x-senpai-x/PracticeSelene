@@ -16,22 +16,26 @@ func NewEvmBuilder() *EvmBuilder {
 		phantom: struct{}{},
     }
 }
-func NewJournalState(spec specs.SpecId,warmPreloadedAddresses map[common.Address]struct{}) JournaledState {
-	return JournaledState{
-		State: nil,
-		TransientStorage: nil,
-		Journal: [][]JournalEntry{},
-		Spec: spec,
+func (eb EvmBuilder) WithDB(db Database) *EvmBuilder {
+	return &EvmBuilder{
+		context : NewContext(eb.context.Evm.WithDB(db), eb.context.External),
+		handler : Handler{Cfg:eb.handler.Cfg},//Doubt
+		phantom : struct{}{},
 	}
 }
-type JournaledState struct {
-	State EvmState
-	TransientStorage TransientStorage
-	Logs []Log 
-	Depth uint
-	Journal [][]JournalEntry
-	Spec specs.SpecId
-	WarmPreloadedAddresses map[common.Address]struct{}
+func (eb *EvmBuilder) WithEnv(env *Env) *EvmBuilder {
+	eb.context.Evm.Inner.Env=env
+	return eb
+}
+func (eb *EvmBuilder) Build() {
+	NewEvm(eb.context,eb.handler)
+}
+func (eb EvmBuilder) WithContextWithHandlerCfg(contextWithHandlerCfg ContextWithHandlerCfg) *EvmBuilder {
+	return &EvmBuilder{
+		context: contextWithHandlerCfg.Context,
+		handler: Handler{Cfg: contextWithHandlerCfg.Cfg},
+		phantom: struct{}{},
+	}
 }
 type EvmState map [common.Address]Account
 type TransientStorage map[Key]U256

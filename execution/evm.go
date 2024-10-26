@@ -1,18 +1,19 @@
 package execution
 
 import (
-	"context"
-	"go.uber.org/zap"
 	"math/big"
 	"sync"
-	"github.com/ethereum/go-ethereum/core"
+
+	"github.com/18aaddy/selene-practics/execution/evm"
 	"github.com/BlocSoc-iitr/selene/common"
+	"github.com/BlocSoc-iitr/selene/execution/logging"
 	Common "github.com/ethereum/go-ethereum/common" //geth common imported as Common
 	"github.com/ethereum/go-ethereum/common/hexutil"
-	"github.com/pkg/errors"
+	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/vm"
-	"github.com/BlocSoc-iitr/selene/execution/logging"
 	"github.com/ethereum/go-ethereum/params"
+	"github.com/pkg/errors"
+	"go.uber.org/zap"
 )
 type BlockTag = common.BlockTag
 type U256 = *big.Int
@@ -30,13 +31,49 @@ func NewEvm(execution *ExecutionClient, chainID uint64, tag BlockTag) *Evm {
 		tag:       tag,
 	}
 }
-type ExecutionResult struct {
-	Success  bool
-	Output   []byte
-	GasUsed  uint64
-	Reverted bool
+func (e *Evm) Call(opts *CallOpts) ([]byte, evmError) {
+    tx, err := e.callInner(opts)
+    if err != nil {
+        return nil, err
+    }
+    switch tx.Result.Type {
+    case "Success":
+        return tx.Result.Output.Data, nil
+    case "Revert":
+        return nil, evm.EvmError{
+            Message: "Revert",
+            Data:    tx.Result.Output.Data,
+        }
+    case "Halt":
+        return nil, evm.EvmError{
+            Message: "Revert",
+        }
+    default:
+        return nil, evm.EvmError{
+            Message: "Unknown execution result type",
+        }
+    }
 }
-func (e *Evm) Call(ctx context.Context, opts *CallOpts) ([]byte, error) {
+func (e *Evm) EstimateGas(opts *CallOpts) (uint64, error) {
+	tx, err := e.callInner(opts)
+	if err != nil {
+		return 0, err
+	}
+
+	switch tx.Result.Type {
+	case "Success":
+		return tx.Result.GasUsed, nil
+	case "Revert":
+		return tx.Result.GasUsed,nil
+	case "Halt":
+		return tx.Result.GasUsed, nil
+	default:
+		return 0, fmt.Errorf("unexpected execution result")
+	}
+}
+
+/*
+func (e *Evm) Call( opts *CallOpts) ([]byte, error) {
 	tx, err := e.callInner(ctx, opts)
 	if err != nil {
 		return nil, err
@@ -48,38 +85,22 @@ func (e *Evm) Call(ctx context.Context, opts *CallOpts) ([]byte, error) {
 	}
 	return nil, &EvmError{Kind: "Halt", Details: nil}
 }
-func (e *Evm) EstimateGas(ctx context.Context,opts *CallOpts) (uint64, error) {
-	tx, err := e.callInner(ctx,opts)
-	if err != nil {
-		return 0, err
-	}
+*/
 
-	switch result := tx.result.(type) {
-	case Success:
-		return result.GasUsed, nil
-	case Revert:
-		return result.GasUsed, nil
-	case Halt:
-		return result.GasUsed, nil
-	default:
-		return 0, fmt.Errorf("unexpected execution result")
-	}
-}
-
-func (e *Evm) callInner(ctx context.Context, opts *CallOpts) (*ExecutionResult, error) {
-	db, err := NewProofDB(ctx, e.tag, e.execution)
+func (e *Evm) callInner(opts *CallOpts) (*evm.ExecutionResult, error) {
+	db, err := NewProofDB( e.tag, e.execution)
 	if err != nil {
 		return nil, err
 	}
 
-	if err := db.State.PrefetchState(ctx, opts); err != nil {
+	if err := db.State.PrefetchState(opts); err != nil {
 		return nil, err
 	}
-	env, err := e.getEnv(ctx, opts, e.tag)
+	env, err := e.getEnv(opts, e.tag)
     if err != nil {
         return nil, err
     }
-
+	evm:=evm.NewEvmBuilder().WithDB(db).WithEnv(env).Build()
 	evm := vm.NewEVM(env.BlockContext, env.TxContext, db.State, params.MainnetChainConfig, vm.Config{})
 
 	chainConfig := params.MainnetChainConfig
@@ -88,7 +109,7 @@ func (e *Evm) callInner(ctx context.Context, opts *CallOpts) (*ExecutionResult, 
 
 	for {
 		if db.State.NeedsUpdate() {
-			if err := db.State.UpdateState(ctx); err != nil {
+			if err := db.State.UpdateState(); err != nil {
 				return nil, err
 			}
 		}
@@ -139,8 +160,11 @@ func (e *Evm) callInner(ctx context.Context, opts *CallOpts) (*ExecutionResult, 
 		return nil, result.Err
 	}
 }
-func (e *Evm) getEnv(ctx context.Context, opts *CallOpts, tag BlockTag) (vm.BlockContext, vm.TxContext, error) {
-	block, err := e.execution.GetBlock(ctx, tag, false)
+func (e *Evm) getEnv( opts *CallOpts, tag BlockTag) evm.Env {
+	env:=evm.NewEnv()//needs to be implemented
+	env.Tx.Transact_to=evm.TransactTo:Call
+
+	block, err := e.execution.GetBlock(tag, false)
 	if err != nil {
 		return vm.BlockContext{}, vm.TxContext{}, err
 	}
@@ -169,7 +193,7 @@ type ProofDB struct {
 	State *EvmState
 }
 
-func NewProofDB(ctx context.Context, tag BlockTag, execution *ExecutionClient) (*ProofDB, error) {
+func NewProofDB( tag BlockTag, execution *ExecutionClient) (*ProofDB, error) {
 	state := NewEvmState(execution, tag)
 	return &ProofDB{
 		State: state,
@@ -217,7 +241,7 @@ func NewEvmState(execution *ExecutionClient, block BlockTag) *EvmState {
 		AccessList: make(map[Address]struct{}), //added just now : UPDATE
 	}
 }
-func (e *EvmState) UpdateState(ctx context.Context) error {
+func (e *EvmState) UpdateState() error {
 	if e.Access == nil {
 		return nil
 	}
@@ -225,7 +249,7 @@ func (e *EvmState) UpdateState(ctx context.Context) error {
 	e.Access = nil // Equivalent to Rust's self.access.take()
 	switch {
 	case access.Basic != nil:
-		account, err := e.Execution.GetAccount(ctx, access.Basic, nil, e.Block)
+		account, err := e.Execution.GetAccount( access.Basic, nil, e.Block)
 		if err != nil {
 			return err
 		}
@@ -243,7 +267,7 @@ func (e *EvmState) UpdateState(ctx context.Context) error {
 		for address, slotValue := range access.Storage {
 			slot := Common.BigToHash(slotValue) // Use slotValue directly
 			slots := []B256{slot}
-			account, err := e.Execution.GetAccount(ctx, &address, slots, e.Block)
+			account, err := e.Execution.GetAccount(&address, slots, e.Block)
 			if err != nil {
 				return err
 			}
@@ -259,7 +283,7 @@ func (e *EvmState) UpdateState(ctx context.Context) error {
 			storage[slotValue] = value
 		}
 	case access.BlockHash != nil:
-		block, err := e.Execution.GetBlock(ctx, BlockTag{Number: *access.BlockHash}, false)
+		block, err := e.Execution.GetBlock(BlockTag{Number: *access.BlockHash}, false)
 		if err != nil {
 			return err
 		}
@@ -298,8 +322,8 @@ func (e *EvmState) GetBlockHash(block uint64) (B256, error) {
 		return B256{}, errors.New("state missing")
 	}
 }
-func (e *EvmState) PrefetchState(ctx context.Context, opts *CallOpts) error {
-	list, err := e.Execution.Rpc.CreateAccessList(ctx, opts, e.Block)
+func (e *EvmState) PrefetchState( opts *CallOpts) error {
+	list, err := e.Execution.Rpc.CreateAccessList(opts, e.Block)
 	if err != nil {
 		return err
 	}
@@ -311,7 +335,7 @@ func (e *EvmState) PrefetchState(ctx context.Context, opts *CallOpts) error {
 		Address:     *opts.To,
 		StorageKeys: []B256{},
 	}
-	coinbase, err := e.Execution.GetBlock(ctx, e.Block, false)
+	coinbase, err := e.Execution.GetBlock( e.Block, false)
 	if err != nil {
 		return err
 	}
@@ -344,7 +368,7 @@ func (e *EvmState) PrefetchState(ctx context.Context, opts *CallOpts) error {
 			defer wg.Done()
 			defer func() { <-sem }()
 
-			acc, err := e.Execution.GetAccount(ctx, &account.Address, account.StorageKeys, e.Block)
+			acc, err := e.Execution.GetAccount(&account.Address, account.StorageKeys, e.Block)
 			if err == nil {
 				mu.Lock()
 				accountMap[account.Address] = *acc

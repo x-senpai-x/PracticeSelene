@@ -1,11 +1,139 @@
 package evm
+
+import (
+    "crypto/ecdsa"
+    "crypto/elliptic"
+    "fmt"
+    "math/big"
+)
+
+// Signature represents an ECDSA signature consisting of V, R, and S values
+type Signature struct {
+    V uint8    // Recovery ID
+    R *big.Int // R component of signature
+    S *big.Int // S component of signature
+}
+
+// NewSignature creates a new ECDSA signature from V, R, and S values
+func NewSignature(v uint8, r, s *big.Int) *Signature {
+    return &Signature{
+        V: v,
+        R: new(big.Int).Set(r),
+        S: new(big.Int).Set(s),
+    }
+}
+
+// ToRawSignature converts the signature to R || S format
+func (s *Signature) ToRawSignature() []byte {
+    rBytes := s.R.Bytes()
+    sBytes := s.S.Bytes()
+    
+    // Ensure each component is 32 bytes
+    signature := make([]byte, 64)
+    copy(signature[32-len(rBytes):32], rBytes)
+    copy(signature[64-len(sBytes):], sBytes)
+    
+    return signature
+}
+
+// FromRawSignature creates a Signature from a raw 64-byte R || S format
+func FromRawSignature(data []byte, v uint8) (*Signature, error) {
+    if len(data) != 64 {
+        return nil, fmt.Errorf("invalid signature length: got %d, want 64", len(data))
+    }
+
+    r := new(big.Int).SetBytes(data[:32])
+    s := new(big.Int).SetBytes(data[32:])
+
+    return &Signature{
+        V: v,
+        R: r,
+        S: s,
+    }, nil
+}
+
+// Verify verifies the signature against a message hash and public key
+func (s *Signature) Verify(pubKey *ecdsa.PublicKey, hash []byte) bool {
+    // Check if r and s are in the valid range
+    if s.R.Sign() <= 0 || s.S.Sign() <= 0 {
+        return false
+    }
+    if s.R.Cmp(pubKey.Params().N) >= 0 || s.S.Cmp(pubKey.Params().N) >= 0 {
+        return false
+    }
+
+    // Verify the signature
+    return ecdsa.Verify(pubKey, hash, s.R, s.S)
+}
 type Env struct{
-    cfg CfgEnv
-    block BlockEnv
-    tx TxEnv
+    Cfg CfgEnv
+    Block BlockEnv
+    Tx TxEnv
 }
 func NewEnv() *Env {
-    return new(Env) // Returns a pointer to a zero-initialized struct
+    return &Env{} // Returns a pointer to a zero-initialized struct
+}
+type TxEnv struct {
+	Caller Address
+	Gas_limit uint64
+	Gas_price U256
+	Transact_to TxKind
+	Value U256
+	Data Bytes
+	Nonce *uint64
+	Chain_id *uint64
+	Access_list []AccessListItem
+	Gas_priority_fee *U256
+	Blob_hashes []B256
+	Max_fee_per_blob_gas *U256
+	Authorization_list *AuthorizationList
+	Optimism OptimismFields//flag on optimism
+}
+type AuthorizationListType int
+
+const (
+	Signed AuthorizationListType = iota
+	Recovered
+)
+type AuthorizationList struct {
+	Type              AuthorizationListType
+	SignedAuthorizations   []SignedAuthorization
+	RecoveredAuthorizations []RecoveredAuthorization
+}
+type ChainID uint64
+type OptionalNonce struct {
+	Nonce *uint64 // nil if no nonce is provided
+}
+type Authorization struct {
+	ChainID ChainID    // The chain ID of the authorization
+	Address Address    // The address of the authorization
+	Nonce   OptionalNonce // The nonce for the authorization
+}
+type SignedAuthorization struct {
+	Inner     Authorization // Embedded authorization data
+	Signature Signature     // Signature associated with authorization
+}
+
+type RecoveredAuthorization struct {
+	Inner     Authorization // Embedded authorization data
+	Authority *Address      // Optional authority address
+}
+
+type TransactTo = TxKind;
+
+type TxKind struct {
+	Type    TxKindType
+	Address *Address // Address is nil for Create type
+}
+type TxKindType int
+
+const (
+	Create TxKindType = iota
+	Call2
+)
+type AccessListItem struct {
+	Address Address
+	StorageKeys []B256
 }
 type CfgEnv struct {
 	ChainID                       uint64         `json:"chain_id"`

@@ -6,6 +6,50 @@ convert to go lang
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 #[derive(Clone, Debug, Eq, PartialEq)]
 #[non_exhaustive]
+//Implemnt with_db
+//First complete innerEvmContext
+impl<'a, EXT, DB: Database> EvmBuilder<'a, SetGenericStage, EXT, DB> {
+
+pub fn with_db<ODB: Database>(self, db: ODB) -> EvmBuilder<'a, SetGenericStage, EXT, ODB> {
+    EvmBuilder {
+        context: Context::new(self.context.evm.with_db(db), self.context.external),
+        handler: EvmBuilder::<'a, SetGenericStage, EXT, ODB>::handler(self.handler.cfg()),
+        phantom: PhantomData,
+    }
+}
+impl<DB: Database> EvmContext<DB> {
+
+pub fn with_db<ODB: Database>(self, db: ODB) -> EvmContext<ODB> {
+    EvmContext {
+        inner: self.inner.with_db(db),
+        precompiles: ContextPrecompiles::default(),
+    }
+}
+impl<DB: Database> InnerEvmContext<DB> {
+
+pub fn with_db<ODB: Database>(self, db: ODB) -> InnerEvmContext<ODB> {
+    InnerEvmContext {
+        env: self.env,
+        journaled_state: self.journaled_state,
+        db,
+        error: Ok(()),
+        valid_authorizations: Default::default(),
+        #[cfg(feature = "optimism")]
+        l1_block_info: self.l1_block_info,
+    }
+}
+impl<DB: Database> Default for ContextPrecompiles<DB> {
+    fn default() -> Self {
+        Self {
+            inner: Default::default(),
+        }
+    }
+}
+impl<DB: Database> Default for PrecompilesCow<DB> {
+    fn default() -> Self {
+        Self::Owned(Default::default())
+    }
+}
 impl<DB: Database> EvmContext<DB> {
     /// Create new context with database.
     pub fn new(db: DB) -> Self {

@@ -14,13 +14,19 @@ func DefaultContext() Context {
 		External: nil,
 	}
 }
+func NewContext(evm EvmContext, external interface{}) Context {
+	return Context{
+		Evm: evm,
+		External: external,
+	}
+}
 type EvmContext struct {
 	Inner InnerEvmContext
 	Precompiles ContextPrecompiles
 }
 func NewEvmContext() EvmContext {
 	return EvmContext{
-		Inner: NewInnerEvmContext(db),
+		Inner: NewInnerEvmContext(),
 		Precompiles: DefaultContextPrecompiles(),
 	}
 }
@@ -31,6 +37,9 @@ type InnerEvmContext struct {
     Error                  error
     ValidAuthorizations    []Address
     L1BlockInfo           *L1BlockInfo // For optimism feature
+}
+func (js JournaledState) SetSpecId(SpecId){
+	js.Spec=SpecId
 }
 //To be reviewed
 func NewInnerEvmContext(db Database) InnerEvmContext {
@@ -43,15 +52,38 @@ func NewInnerEvmContext(db Database) InnerEvmContext {
 		L1BlockInfo: nil,
 	}
 }
+func (c EvmContext)WithDB(db Database) EvmContext{
+	return EvmContext{
+		Inner: c.Inner.WithDB(db),
+		Precompiles: DefaultContextPrecompiles(),
+	}
+}
+func (inner InnerEvmContext)WithDB(db Database) InnerEvmContext{
+	return InnerEvmContext{
+		Env: inner.Env,
+		JournaledState: inner.JournaledState,
+		DB: db,
+		Error: inner.Error,
+		ValidAuthorizations: nil,
+		L1BlockInfo: inner.L1BlockInfo,
+	}
+}
+type L1BlockInfo struct {
+	L1BaseFee U256
+	L1FeeOverhead *U256
+	L1BaseFeeScalar U256
+	L1BlobBaseFee *U256
+	L1BlobBaseFeeScalar *U256
+	EmptyScalars bool
+}
 type ContextPrecompiles struct {
 	Inner PrecompilesCow
 }
-func NewContextPrecompiles() *ContextPrecompiles {
-	return &ContextPrecompiles{
-		Inner: 
+func DefaultContextPrecompiles() ContextPrecompiles {
+	return ContextPrecompiles{
+		Inner: NewPrecompilesCow(),
 	}
 }
-
 type PrecompilesCow struct {
 	isStatic bool
 	StaticRef *Precompiles
@@ -61,7 +93,6 @@ func NewPrecompilesCow () PrecompilesCow{
 	return PrecompilesCow{
 		Owned: make(map[Address]ContextPrecompile),
 	}
-
 }
 type Precompiles struct {
 	Inner map[Address]Precompile
@@ -153,3 +184,7 @@ func (e PrecompileError) Error() string {
 
 
 
+type ContextWithHandlerCfg struct {
+	Context Context
+	Cfg HandlerCfg
+}

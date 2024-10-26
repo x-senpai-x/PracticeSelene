@@ -14,13 +14,16 @@ type BoxedInstruction[H any] *DynInstruction[H]
 // BoxedInstructionTable is an array of 256 boxed instructions.
 type BoxedInstructionTable[H any] [256]BoxedInstruction[H]
 
-// InstructionTables represents either a plain or boxed instruction table.
-// In Go, this is implemented with a struct that holds either of the table types.
+const (
+	PlainTableMode = iota
+	BoxedTableMode
+)
 type InstructionTables[H any] struct {
-    PlainTable *InstructionTable[H]
-    BoxedTable *BoxedInstructionTable[H]
+	PlainTable *InstructionTable[H]
+	BoxedTable *BoxedInstructionTable[H]
+	Mode       int // Indicates which table is in use (Plain or Boxed)
 }
-
+//Mode contains 0 and 1
 // NewPlainInstructionTable creates an InstructionTables instance with a PlainTable.
 func NewPlainInstructionTable[H any](table InstructionTable[H]) InstructionTables[H] {
     return InstructionTables[H]{PlainTable: &table}
