@@ -6,9 +6,9 @@ import (
 	// "github.com/ethereum/go-ethereum/common"
 )
 
-type Evm struct {
-	Context Context
-	Handler Handler
+type Evm[EXT interface{}, DB Database] struct {
+	Context Context[EXT, DB]
+	Handler Handler[Context[EXT, DB], EXT, DB]
 }
 
 func NewEvm(context Context , handler Handler) Evm {
@@ -108,10 +108,6 @@ func (e *Evm) RunTheLoop(firstFrame Frame) (FrameResult, DatabaseError) {
 	
 }
 
-// type TxKind struct {
-// 	Create string
-// 	Call   *common.Address.
-// }
 
 func (s SpecId) IsEnabledIn(spec SpecId) bool {
 	return s.Enabled(s, spec)
@@ -120,93 +116,6 @@ func (s SpecId) IsEnabledIn(spec SpecId) bool {
 func (s SpecId) Enabled(a SpecId, b SpecId) bool {
 	return uint8(a) >= uint8(b)
 }
-
-// type CallInputs struct {
-// 	Input              []byte         `json:"input"`
-// 	ReturnMemoryOffset Range          `json:"return_memory_offset"`
-// 	GasLimit           uint64         `json:"gas_limit"`
-// 	BytecodeAddress    common.Address `json:"bytecode_address"`
-// 	TargetAddress      common.Address `json:"target_address"`
-// 	Caller             common.Address `json:"caller"`
-// 	Value              CallValue      `json:"value"`
-// 	Scheme             CallScheme     `json:"scheme"`
-// 	IsStatic           bool           `json:"is_static"`
-// 	IsEof              bool           `json:"is_eof"`
-// }
-
-// type CreateInputs struct {
-// 	Caller   common.Address `json:"caller"`
-// 	Scheme   CreateScheme   `json:"scheme"`
-// 	Value    *big.Int       `json:"value"`
-// 	InitCode []byte         `json:"init_code"`
-// 	GasLimit uint64         `json:"gas_limit"`
-// }
-
-// type CreateScheme struct {
-// 	Kind CreateSchemeKind
-// 	Salt *big.Int // Only for Create2
-// }
-
-// type CreateSchemeKind = uint8
-
-// const (
-// 	Create CreateSchemeKind = iota
-// 	Create2
-// )
-
-// type Range struct {
-// 	Start int
-// 	End   int
-// }
-
-// type CallValueType = uint8
-
-// const (
-// 	Transfer CallValueType = iota
-// 	Apparent
-// )
-
-// type CallValue struct {
-// 	Type  CallValueType
-// 	Value *big.Int
-// }
-
-// // CallScheme is a custom type representing the different call schemes.
-// type CallScheme int
-
-// const (
-// 	// Define constants for each variant in CallScheme.
-// 	Call CallScheme = iota
-// 	CallCode
-// 	DelegateCall
-// 	StaticCall
-// 	ExtCall
-// 	ExtStaticCall
-// 	ExtDelegateCall
-// )
-
-// // Possible Error here while marshaling and unmarshaling
-// type EOFCreateInputs struct {
-// 	Caller   common.Address `json:"caller"`
-// 	Value    *big.Int       `json:"value"`
-// 	GasLimit uint64         `json:"gas_limit"`
-// 	Kind     EOFCreateKind  `json:"kind"`
-// }
-
-// type EOFCreateKind struct {
-// 	Kind           kind   // "Tx" or "Opcode"
-// 	InitData       []byte // Only for Tx
-// 	InitCode       []byte // Only for Opcode
-// 	Input          []byte // Only for Opcode
-// 	CreatedAddress string // Only for Opcode
-// }
-
-// type kind = uint8
-
-// const (
-// 	Tx kind = iota
-// 	Opcode
-// )
 
 // String method to provide a string representation for each CallScheme variant.
 func (cs CallScheme) String() string {

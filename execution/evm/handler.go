@@ -1,15 +1,15 @@
 package evm
-type Handler [EXT any, DB Database]struct{
+type Handler [H Host, EXT any, DB Database]struct{
 	Cfg HandlerCfg
-	InstructionTable InstructionTables
-	Registers []HandleRegisters[EXT, DB]
+	InstructionTable InstructionTables[H]
+	Registers []HandleRegisters[H, EXT, DB]
 	Validation ValidationHandler[EXT, DB]
 	PreExecution PreExecutionHandler[EXT, DB]
 	PostExecution PostExecutionHandler[EXT, DB]
 	Execution ExecutionHandler[EXT,DB]
 }
 
-type PostExecutionHandler[EXT any, DB any] struct {
+type PostExecutionHandler[EXT any, DB Database] struct {
     ReimburseCaller      ReimburseCallerHandle[EXT, DB]
     RewardBeneficiary    RewardBeneficiaryHandle[EXT, DB]
     Output               OutputHandle[EXT, DB]
@@ -18,19 +18,19 @@ type PostExecutionHandler[EXT any, DB any] struct {
 }
 
 // ReimburseCallerHandle type definition.
-type ReimburseCallerHandle[EXT any, DB any] func(ctx *Context[EXT, DB], gas *Gas) EVMResultGeneric[struct{}, any]
+type ReimburseCallerHandle[EXT any, DB Database] func(ctx *Context[EXT, DB], gas *Gas) EVMResultGeneric[struct{}, any]
 
 // RewardBeneficiaryHandle type definition (same as ReimburseCallerHandle).
-type RewardBeneficiaryHandle[EXT any, DB any]  ReimburseCallerHandle[EXT, DB]
+type RewardBeneficiaryHandle[EXT any, DB Database]  ReimburseCallerHandle[EXT, DB]
 
 // OutputHandle type definition.
-type OutputHandle[EXT any, DB any] func(ctx *Context[EXT, DB], frameResult FrameResult) (ResultAndState, EVMError[any])
+type OutputHandle[EXT any, DB Database] func(ctx *Context[EXT, DB], frameResult FrameResult) (ResultAndState, EvmError)
 
 // EndHandle type definition.
-type EndHandle[EXT any, DB any] func(ctx *Context[EXT, DB], result EVMResultGeneric[ResultAndState, EVMError[any]]) (ResultAndState, EVMError[any])
+type EndHandle[EXT any, DB Database] func(ctx *Context[EXT, DB], result EVMResultGeneric[ResultAndState, EvmError]) (ResultAndState, EvmError)
 
 // ClearHandle type definition.
-type ClearHandle[EXT any, DB any] func(ctx *Context[EXT, DB])
+type ClearHandle[EXT any, DB Database] func(ctx *Context[EXT, DB])
 
 type LoadPrecompilesHandle[DB Database] func() ContextPrecompiles[DB]
 type LoadAccountsHandle[EXT any, DB Database] func(ctx *Context[EXT, DB]) error
@@ -52,11 +52,11 @@ type ValidationHandler[EXT any, DB Database] struct {
 type ValidateEnvHandle[DB Database] func(env *Env) error
 type ValidateTxEnvAgainstState[EXT any, DB Database] func(ctx *Context[EXT, DB]) error
 type ValidateInitialTxGasHandle[DB Database] func(env *Env) (uint64, error)
-func NewHandler(cfg HandlerCfg) Handler {
-    return createHandlerWithConfig(cfg)
+func NewHandler[H Host, EXT any, DB Database](cfg HandlerCfg) Handler[H, EXT, DB] {
+    return createHandlerWithConfig[H, EXT, DB](cfg)
 }
-func createHandlerWithConfig(cfg HandlerCfg) Handler {
-    spec := getSpecForID(cfg.specID)
+func createHandlerWithConfig[H Host, EXT any, DB Database](cfg HandlerCfg) Handler[H, EXT, DB] {
+    spec := getSpecForID[H, EXT, DB](cfg.specID)
     
     if cfg.isOptimism {
         return createOptimismHandler(spec)
@@ -74,36 +74,36 @@ func NewHandlerCfg(specID SpecId) HandlerCfg {
     }
 }
 // EvmHandler is a type alias for Handler with specific type parameters.
-type EvmHandler[EXT any, DB Database] Handler[EXT, DB]
+type EvmHandler[H Host, EXT any, DB Database] Handler[H, EXT, DB]
 
 // HandleRegister defines a function type that accepts a pointer to EvmHandler.
-type HandleRegister[EXT any, DB Database] func(handler *EvmHandler[EXT, DB])
+type HandleRegister[H Host, EXT any, DB Database] func(handler *EvmHandler[H, EXT, DB])
 
 // HandleRegisterBox defines a function type as a boxed register.
-type HandleRegisterBox[EXT any, DB Database] func(handler *EvmHandler[EXT, DB])
+type HandleRegisterBox[H Host, EXT any, DB Database] func(handler *EvmHandler[H, EXT, DB])
 
 // HandleRegisters is an interface that defines the `Register` method.
-type HandleRegisters[EXT any, DB Database] interface {
-	Register(handler *EvmHandler[EXT, DB])
+type HandleRegisters[H Host, EXT any, DB Database] interface {
+	Register(handler *EvmHandler[H, EXT, DB])
 }
 
 // PlainRegister struct implements HandleRegisters with a plain function register.
-type PlainRegister[EXT any, DB Database] struct {
-	RegisterFn HandleRegister[EXT, DB]
+type PlainRegister[H Host, EXT any, DB Database] struct {
+	RegisterFn HandleRegister[H, EXT, DB]
 }
 
 // BoxRegister struct implements HandleRegisters with a boxed function register.
-type BoxRegister[EXT any, DB Database] struct {
-	RegisterFn HandleRegisterBox[EXT, DB]
+type BoxRegister[H Host, EXT any, DB Database] struct {
+	RegisterFn HandleRegisterBox[H, EXT, DB]
 }
 
 // Register method for PlainRegister, to satisfy HandleRegisters interface.
-func (p PlainRegister[EXT, DB]) Register(handler *EvmHandler[EXT, DB]) {
+func (p PlainRegister[H, EXT, DB]) Register(handler *EvmHandler[H, EXT, DB]) {
 	p.RegisterFn(handler)
 }
 
 // Register method for BoxRegister, to satisfy HandleRegisters interface.
-func (b BoxRegister[EXT, DB]) Register(handler *EvmHandler[EXT, DB]) {
+func (b BoxRegister[H, EXT, DB]) Register(handler *EvmHandler[H, EXT, DB]) {
 	b.RegisterFn(handler)
 }
 /*
