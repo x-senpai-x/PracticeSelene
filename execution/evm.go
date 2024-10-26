@@ -3,7 +3,10 @@ package execution
 import (
 	"log"
 	"math/big"
+	"fmt"
+	"bytes"
 	"sync"
+	"encoding/hex"
 	Common "github.com/ethereum/go-ethereum/common" //geth common imported as Common
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core"
@@ -196,10 +199,13 @@ func NewEvmState(execution *ExecutionClient, block BlockTag) *EvmState {
 		//AccessList: make(map[Address]struct{}), //added just now : UPDATE
 	}
 }
+
 type AccessListItem struct {
-	Address     Address //I used Common here instead of common
+	Address     common.Address //I used Common here instead of common
 	StorageKeys []B256
 }
+type AccessList []AccessListItem
+
 func (e *EvmState) UpdateState() error {
 	if e.Access == nil {
 		return nil
@@ -208,7 +214,7 @@ func (e *EvmState) UpdateState() error {
 	e.Access = nil // Equivalent to Rust's self.access.take()
 	switch {
 	case access.Basic != nil:
-		account, err := e.Execution.GetAccount( access.Basic, nil, e.Block)
+		account, err := e.Execution.GetAccount( access.Basic, []Common.Hash{}, e.Block)
 		if err != nil {
 			return err
 		}
@@ -223,23 +229,28 @@ func (e *EvmState) UpdateState() error {
 		}
 		e.Basic[*access.Basic] = accountInfo
 	case access.Storage != nil:
-		for address, slotValue := range access.Storage {
-			slot := Common.BigToHash(slotValue) // Use slotValue directly
-			slots := []B256{slot}
-			account, err := e.Execution.GetAccount(&address, slots, e.Block)
-			if err != nil {
-				return err
+		slots := make([]Common.Hash, 0, len(access.Storage))
+		for slotKey := range access.Storage {
+			slotHash := Common.BytesToHash(slotKey.Addr[:])
+			slots = append(slots, slotHash)
+		}
+		account, err := e.Execution.GetAccount(access.Basic, slots, e.Block)
+		if err != nil {
+			return err
+		}
+		storage, ok := e.Storage[*access.Basic]
+		if !ok {
+			storage = make(map[U256]U256) // Initialize with *big.Int
+			e.Storage[*access.Basic] = storage
+		}
+		for slotKey := range access.Storage {
+			slotHash := Common.BytesToHash(slotKey.Addr[:])
+			slotValue, exists := account.Slots[slotHash]
+			if !exists {
+				return fmt.Errorf("storage slot %v not found in account", slotHash)
 			}
-			storage, ok := e.Storage[address]
-			if !ok {
-				storage = make(map[U256]U256) // Initialize with *big.Int
-				e.Storage[address] = storage
-			}
-			value, ok := account.Slots[slot]
-			if !ok {
-				return errors.New("slot not found in account")
-			}
-			storage[slotValue] = value
+			value := U256FromBigEndian(slotValue.Bytes())
+			storage[slotHash.Big()] = value
 		}
 	case access.BlockHash != nil:
 		block, err := e.Execution.GetBlock(BlockTag{Number: *access.BlockHash}, false)
@@ -253,6 +264,13 @@ func (e *EvmState) UpdateState() error {
 	}
 	return nil
 }
+
+func U256FromBigEndian(b []byte) *big.Int {
+    if len(b) != 32 {
+        return nil // or handle the error appropriately
+    }
+    return new(big.Int).SetBytes(b)
+}
 func (e *EvmState) NeedsUpdate() bool {
 	return e.Access != nil //Checks if access Field is non zero
 }
@@ -261,7 +279,7 @@ func (e *EvmState) GetBasic(address Address) (evm.AccountInfo, error) {
 		return account, nil
 	} else {
 		e.Access = &StateAccess{Basic: &address}
-		return AccountInfo{}, errors.New("state missing")
+		return evm.AccountInfo{}, errors.New("state missing")
 	}
 }
 func (e *EvmState) GetStorage(address Address, slot U256) (U256, error) {
@@ -282,7 +300,7 @@ func (e *EvmState) GetBlockHash(block uint64) (B256, error) {
 	}
 }
 func (e *EvmState) PrefetchState( opts *CallOpts) error {
-	list, err := e.Execution.Rpc.CreateAccessList(opts, e.Block)
+	list, err := e.Execution.Rpc.CreateAccessList(*opts, e.Block)
 	if err != nil {
 		return err
 	}
@@ -306,7 +324,6 @@ func (e *EvmState) PrefetchState( opts *CallOpts) error {
 	for _, item := range list {
 		listAddresses[item.Address] = true
 	}
-
 	if !listAddresses[fromAccessEntry.Address] {
 		list = append(list, fromAccessEntry)
 	}
@@ -330,7 +347,7 @@ func (e *EvmState) PrefetchState( opts *CallOpts) error {
 			acc, err := e.Execution.GetAccount(&account.Address, account.StorageKeys, e.Block)
 			if err == nil {
 				mu.Lock()
-				accountMap[account.Address] = *acc
+				accountMap[account.Address] = acc
 				mu.Unlock()
 			}
 		}(account)
@@ -340,7 +357,7 @@ func (e *EvmState) PrefetchState( opts *CallOpts) error {
 		bytecode := NewBytecodeRaw(account.Code)
 		codeHash := Common.BytesToHash(account.CodeHash[:])
 		balance := ConvertU256(account.Balance)
-		info := NewAccountInfo(balance, account.Nonce, codeHash, bytecode)
+		info := evm.NewAccountInfo(balance, account.Nonce, codeHash, bytecode)
 		e.Basic[address] = info
 		for slot, value := range account.Slots {
 			slotHash := B256FromSlice(slot[:])
@@ -367,27 +384,35 @@ func (db *ProofDB) Basic(address Address) (evm.AccountInfo, error) {
 	if isPrecompile(address) {
 		return evm.AccountInfo{}, nil // Return a default AccountInfo
 	}
-	logging.Trace("fetch basic evm state for address", zap.String("address", address.Hex()))
+	//logging.Trace("fetch basic evm state for address", zap.String("address", address.Hex()))
+	logging.Trace("fetch basic evm state for address", zap.String("address",hex.EncodeToString(address.Addr[:]) ))
 	return db.State.GetBasic(address)
 }
+
 func (db *ProofDB) BlockHash(number uint64) (B256, error) {
 	logging.Trace("fetch block hash for block number", zap.Uint64("number", number))
 	return db.State.GetBlockHash(number)
 }
 func (db *ProofDB) Storage(address Address, slot *big.Int) (*big.Int, error) {
 	logging.Trace("fetch storage for address and slot",
-		zap.String("address", address.Hex()),
+		zap.String("address",hex.EncodeToString(address.Addr[:]) ),
 		zap.String("slot", slot.String()))
 	return db.State.GetStorage(address, slot)
 }
 func (db *ProofDB) CodeByHash(_ B256) (evm.Bytecode, error) {
     return evm.Bytecode{}, errors.New("should never be called")
 }
-
+func isPrecompile(address Address) bool {
+    precompileAddress := Common.BytesToAddress([]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x09})
+	zeroAddress := common.Address{}
+	return bytes.Compare(address.Addr[:], precompileAddress[:]) <= 0 && bytes.Compare(address.Addr[:], zeroAddress.Addr[:]) > 0
+}
+/*
 func isPrecompile(address Address) bool {
 	precompileAddress := Address{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x09}
 	return address.Cmp(precompileAddress) <= 0 && address.Cmp(Address{}) > 0
 }
+*/
 type Bytecode []byte
 
 func NewBytecodeRaw(code []byte) hexutil.Bytes {

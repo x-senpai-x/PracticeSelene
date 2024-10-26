@@ -57,9 +57,9 @@ func (e *ExecutionClient) CheckRpc(chainID uint64) error {
 	return nil
 }
 // GetAccount retrieves the account information
-func (e *ExecutionClient) GetAccount(address *seleneCommon.Address, slots common.Hash, tag seleneCommon.BlockTag) (Account, error) { //Account from execution/types.go
+func (e *ExecutionClient) GetAccount(address *seleneCommon.Address, slots []common.Hash, tag seleneCommon.BlockTag) (Account, error) { //Account from execution/types.go
 	block := e.state.GetBlock(tag)
-	proof, _ := e.Rpc.GetProof(address, &[]common.Hash{slots}, block.Number) 
+	proof, _ := e.Rpc.GetProof(address, &slots, block.Number) 
 
 	accountPath := crypto.Keccak256(address.Addr[:])
 	accountEncoded, _ := EncodeAccount(&proof) 

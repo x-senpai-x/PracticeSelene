@@ -43,8 +43,8 @@ type Account struct {
 	Slots       map[common.Hash]*big.Int
 }
 type CallOpts struct {
-	From     *common.Address `json:"from,omitempty"`
-	To       *common.Address `json:"to,omitempty"`
+	From     *seleneCommon.Address `json:"from,omitempty"`
+	To       *seleneCommon.Address `json:"to,omitempty"`
 	Gas      *big.Int        `json:"gas,omitempty"`
 	GasPrice *big.Int        `json:"gasPrice,omitempty"`
 	Value    *big.Int        `json:"value,omitempty"`
