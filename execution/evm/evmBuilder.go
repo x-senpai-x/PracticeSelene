@@ -7,11 +7,18 @@ import (
 
 	"github.com/BlocSoc-iitr/selene/common"
 )
+type EvmBuilder[EXT interface, DB Database] struct {
+    context *Context[Ext, DB]
+    handler *Handler[Ext, DB]
+	phantom struct{}
+
+}
+/*
 type EvmBuilder struct {
 	context Context
 	handler Handler
 	phantom struct{}
-}
+}*/
 func NewEvmBuilder() *EvmBuilder {
     handlerCfg := NewHandlerCfg(LATEST)
     return &EvmBuilder{
@@ -31,8 +38,8 @@ func (eb *EvmBuilder) WithEnv(env *Env) *EvmBuilder {
 	eb.context.Evm.Inner.Env=env
 	return eb
 }
-func (eb *EvmBuilder) Build() {
-	NewEvm(eb.context,eb.handler)
+func (eb *EvmBuilder) Build() Evm {
+	return NewEvm(eb.context,eb.handler)
 }
 func (eb EvmBuilder) WithContextWithHandlerCfg(contextWithHandlerCfg ContextWithHandlerCfg) *EvmBuilder {
 	return &EvmBuilder{

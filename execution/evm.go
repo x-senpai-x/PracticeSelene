@@ -1,24 +1,25 @@
 package execution
 
 import (
+	"log"
 	"math/big"
 	"sync"
 
-	"github.com/18aaddy/selene-practics/execution/evm"
-	"github.com/BlocSoc-iitr/selene/common"
-	"github.com/BlocSoc-iitr/selene/execution/logging"
 	Common "github.com/ethereum/go-ethereum/common" //geth common imported as Common
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core"
 	"github.com/ethereum/go-ethereum/core/vm"
 	"github.com/ethereum/go-ethereum/params"
 	"github.com/pkg/errors"
+	"github.com/x-senpai-x/PracticeSelene/common"
+	"github.com/x-senpai-x/PracticeSelene/execution/evm"
+	"github.com/x-senpai-x/PracticeSelene/execution/logging"
 	"go.uber.org/zap"
 )
 type BlockTag = common.BlockTag
 type U256 = *big.Int
 type B256 = Common.Hash
-type Address = Common.Address
+type Address = common.Address
 type Evm struct {
 	execution *ExecutionClient
 	chainID   uint64
@@ -71,43 +72,23 @@ func (e *Evm) EstimateGas(opts *CallOpts) (uint64, error) {
 		return 0, fmt.Errorf("unexpected execution result")
 	}
 }
-
-/*
-func (e *Evm) Call( opts *CallOpts) ([]byte, error) {
-	tx, err := e.callInner(ctx, opts)
-	if err != nil {
-		return nil, err
-	}
-	if tx.Success {
-		return tx.Output, nil
-	} else if tx.Reverted {
-		return nil, &EvmError{Kind: "Revert", Details: tx.Output}
-	}
-	return nil, &EvmError{Kind: "Halt", Details: nil}
-}
-*/
-
 func (e *Evm) callInner(opts *CallOpts) (*evm.ExecutionResult, error) {
 	db, err := NewProofDB( e.tag, e.execution)
 	if err != nil {
 		return nil, err
 	}
-
 	if err := db.State.PrefetchState(opts); err != nil {
 		return nil, err
 	}
-	env, err := e.getEnv(opts, e.tag)
-    if err != nil {
-        return nil, err
-    }
-	evm:=evm.NewEvmBuilder().WithDB(db).WithEnv(env).Build()
-	evm := vm.NewEVM(env.BlockContext, env.TxContext, db.State, params.MainnetChainConfig, vm.Config{})
-
-	chainConfig := params.MainnetChainConfig
-	chainConfig.ChainID = new(big.Int).SetUint64(e.chainID)
-	evm := vm.NewEVM(env.BlockContext, env.TxContext, db.State, params.MainnetChainConfig, vm.Config{})
-
+	env := e.getEnv(opts, e.tag)
+	evm:=evm.NewEvmBuilder().WithDB(db).WithEnv(&env).Build()
+	//ctx:=evm.IntoContextWithHandlerCfg()
+// ctx is a ContextWithHandlerCfg instance created from evm using IntoContextWithHandlerCfg.
+	ctx := evm.IntoContextWithHandlerCfg[interface{}, ProofDB](evm)
+	//ctx:=evm.IntoContextWithHandlerCfg[interface{}, ProofDB](evm)
 	for {
+		db:=ctx.Context.Evm.Inner.DB
+		if db.
 		if db.State.NeedsUpdate() {
 			if err := db.State.UpdateState(); err != nil {
 				return nil, err
@@ -162,32 +143,26 @@ func (e *Evm) callInner(opts *CallOpts) (*evm.ExecutionResult, error) {
 }
 func (e *Evm) getEnv( opts *CallOpts, tag BlockTag) evm.Env {
 	env:=evm.NewEnv()//needs to be implemented
-	env.Tx.Transact_to=evm.TransactTo:Call
-
+	//env.Tx.Transact_to=evm.TransactTo:Call
+	env.Tx.Caller=*opts.From //is conversion required?
+	env.Tx.Value=opts.Value
+	env.Tx.Data=opts.Data
+	env.Tx.Gas_limit=opts.Gas.Uint64()
+	env.Tx.Gas_price=opts.GasPrice
 	block, err := e.execution.GetBlock(tag, false)
 	if err != nil {
-		return vm.BlockContext{}, vm.TxContext{}, err
-	}
-	blockContext := vm.BlockContext{
-		CanTransfer: core.CanTransfer,
-		Transfer:    core.Transfer,
-		GetHash: func(n uint64) B256 {
-			return B256{} // You might want to implement this properly
-		},
-		Coinbase:    block.Miner,
-		BlockNumber: new(big.Int).SetUint64(block.Number),
-		Time:        block.Timestamp,
-		Difficulty:  block.Difficulty.ToBig(),
-		GasLimit:    block.GasLimit,
-		BaseFee:     block.BaseFeePerGas.ToBig(),
-	}
-
-	txContext := vm.TxContext{
-		Origin:   *opts.From,
-		GasPrice: opts.GasPrice,
-	}
-
-	return blockContext, txContext, nil
+        // Handle the error appropriately, e.g., log it or set default values
+        log.Printf("Error getting block: %v", err)
+        // Return a default or empty env in case of error
+        return evm.Env{}
+    }
+	env.Block.Number=block.Number
+	env.Block.Coinbase=block.Miner
+	env.Block.Timestamp=block.Timestamp
+	env.Block.Difficulty=block.Difficulty
+	env.Cfg.ChainID=e.chainID
+	
+	return env
 }
 type ProofDB struct {
 	State *EvmState
@@ -222,7 +197,7 @@ func NewAccountInfo(balance U256, nonce uint64, codeHash B256, code hexutil.Byte
 }
 
 type EvmState struct {
-	Basic      map[Address]AccountInfo
+	Basic      map[Address]evm.AccountInfo
 	BlockHash  map[uint64]B256
 	Storage    map[Address]map[U256]U256
 	Block      BlockTag
@@ -232,7 +207,7 @@ type EvmState struct {
 } //added just now : UPDATE
 func NewEvmState(execution *ExecutionClient, block BlockTag) *EvmState {
 	return &EvmState{
-		Basic:      make(map[Address]AccountInfo),
+		Basic:      make(map[Address]evm.AccountInfo),
 		BlockHash:  make(map[uint64]B256),
 		Storage:    make(map[Address]map[U256]U256),
 		Block:      block,
@@ -256,7 +231,7 @@ func (e *EvmState) UpdateState() error {
 		bytecode := NewBytecodeRaw(account.Code)
 		codeHash := B256FromSlice(account.CodeHash[:])
 		balance := ConvertU256(account.Balance)
-		accountInfo := AccountInfo{
+		accountInfo := evm.AccountInfo{
 			Balance:  balance,
 			Nonce:    account.Nonce,
 			CodeHash: codeHash,
@@ -297,7 +272,7 @@ func (e *EvmState) UpdateState() error {
 func (e *EvmState) NeedsUpdate() bool {
 	return e.Access != nil //Checks if access Field is non zero
 }
-func (e *EvmState) GetBasic(address Address) (AccountInfo, error) {
+func (e *EvmState) GetBasic(address Address) (evm.AccountInfo, error) {
 	if account, exists := e.Basic[address]; exists {
 		return account, nil
 	} else {
@@ -424,9 +399,9 @@ type Database interface {
 	CodeByHash(codeHash B256) (Bytecode, error)
 }
 
-func (db *ProofDB) Basic(address Address) (AccountInfo, error) {
+func (db *ProofDB) Basic(address Address) (evm.AccountInfo, error) {
 	if isPrecompile(address) {
-		return AccountInfo{}, nil // Return a default AccountInfo
+		return evm.AccountInfo{}, nil // Return a default AccountInfo
 	}
 	logging.Trace("fetch basic evm state for address", zap.String("address", address.Hex()))
 	return db.State.GetBasic(address)
@@ -441,10 +416,10 @@ func (db *ProofDB) Storage(address Address, slot *big.Int) (*big.Int, error) {
 		zap.String("slot", slot.String()))
 	return db.State.GetStorage(address, slot)
 }
-func (db *ProofDB) CodeByHash(codeHash B256) (Bytecode, error) {
-	logging.Trace("fetch code by hash", zap.String("codeHash", codeHash.Hex()))
-	return nil, nil
+func (db *ProofDB) CodeByHash(_ B256) (evm.Bytecode, error) {
+    return evm.Bytecode{}, errors.New("should never be called")
 }
+
 func isPrecompile(address Address) bool {
 	precompileAddress := Address{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x09}
 	return address.Cmp(precompileAddress) <= 0 && address.Cmp(Address{}) > 0

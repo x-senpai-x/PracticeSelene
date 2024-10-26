@@ -16,16 +16,11 @@ func (e *DatabaseError) Error() string {
 // Database interface defines required methods for blockchain database interaction
 type Database interface {
 	// Basic retrieves basic account information
-	Basic(address Address) (*AccountInfo, error)
-
-	// CodeByHash retrieves bytecode using its hash
+	Basic(address Address) (AccountInfo, error)
+	BlockHash(number uint64) (B256, error)
+	Storage(address Address, index U256) (U256, error)
 	CodeByHash(codeHash B256) (Bytecode, error)
 
-	// Storage retrieves storage value at given address and index
-	Storage(address Address, index U256) (*U256, error)
-
-	// BlockHash retrieves the hash of a block by its number
-	BlockHash(number uint64) (B256, error)
 }
 //SAMPLE IMPLEMENTATION
 /*

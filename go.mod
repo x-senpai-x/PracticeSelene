@@ -1,4 +1,4 @@
-module github.com/18aaddy/selene-practics
+module github.com/x-senpai-x/PracticeSelene
 
 go 1.22.3
 

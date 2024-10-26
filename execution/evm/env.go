@@ -71,8 +71,8 @@ type Env struct{
     Block BlockEnv
     Tx TxEnv
 }
-func NewEnv() *Env {
-    return &Env{} // Returns a pointer to a zero-initialized struct
+func NewEnv() Env {
+    return Env{} // Returns a pointer to a zero-initialized struct
 }
 type TxEnv struct {
 	Caller Address

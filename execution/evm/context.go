@@ -4,33 +4,33 @@ import (
 	"fmt"
 	"sync"
 )
-type Context struct {
-	Evm EvmContext
+type Context[EXT interface{}, DB Database] struct {
+	Evm EvmContext [DB]
 	External interface{}
 }
-func DefaultContext() Context {
-	return Context{
-		Evm: NewEvmContext(),
-		External: nil,
-	}
+func DefaultContext[EXT interface{}, DB Database]() Context[EXT, DB] {
+    return Context[EXT, DB]{
+        Evm:     NewEvmContext(),
+        External: nil,
+    }
 }
-func NewContext(evm EvmContext, external interface{}) Context {
-	return Context{
-		Evm: evm,
-		External: external,
-	}
+func NewContext[EXT interface{}, DB Database](evm EvmContext [DB], external EXT) Context[EXT, DB] {
+    return Context[EXT, DB]{
+        Evm:     evm,
+        External: external,
+    }
 }
-type EvmContext struct {
-	Inner InnerEvmContext
+type EvmContext[DB Database] struct {
+	Inner InnerEvmContext [DB]
 	Precompiles ContextPrecompiles
 }
-func NewEvmContext() EvmContext {
-	return EvmContext{
-		Inner: NewInnerEvmContext(),
+func NewEvmContext[DB Database](db DB) EvmContext[DB] {
+	return EvmContext[DB]{
+		Inner: NewInnerEvmContext(db),
 		Precompiles: DefaultContextPrecompiles(),
 	}
 }
-type InnerEvmContext struct {
+type InnerEvmContext[DB Database] struct {
     Env                    *Env
     JournaledState        JournaledState
     DB                     Database
@@ -42,8 +42,8 @@ func (js JournaledState) SetSpecId(SpecId){
 	js.Spec=SpecId
 }
 //To be reviewed
-func NewInnerEvmContext(db Database) InnerEvmContext {
-	return InnerEvmContext{
+func NewInnerEvmContext[DB Database](db DB) InnerEvmContext[DB] {
+	return InnerEvmContext[DB]{
 		Env: NewEnv(),
 		JournaledState: nil,//to be changed
 		DB: db,
@@ -184,7 +184,7 @@ func (e PrecompileErrorStruct) Error() string {
 
 
 
-type ContextWithHandlerCfg struct {
-	Context Context
+type ContextWithHandlerCfg[EXT interface{}, DB Database] struct {
+	Context Context[EXT, DB]
 	Cfg HandlerCfg
 }

@@ -18,13 +18,19 @@ func NewEvm(context Context , handler Handler) Evm {
 		Handler: handler,
 	}
 }
-func (evm Evm) IntoContextWithHandlerCfg() ContextWithHandlerCfg {
-	return ContextWithHandlerCfg{
-		Context: evm.Context,
-		Cfg: evm.Handler.Cfg,
-	}
+/*
+func (evm Evm) IntoContextWithHandlerCfg[EXT interface{}, DB Database]() ContextWithHandlerCfg[EXT, DB] {
+    return ContextWithHandlerCfg[EXT, DB]{
+        Context: evm.Context,
+        Cfg:     evm.Handler.Cfg,
+    }
+}*/
+func IntoContextWithHandlerCfg[EXT interface{}, DB Database](evm Evm) ContextWithHandlerCfg[EXT, DB] {
+    return ContextWithHandlerCfg[EXT, DB]{
+        Context: evm.Context,
+        Cfg:     evm.Handler.Cfg,
+    }
 }
-
 type EvmResult struct{}
 // type EvmError struct{}
 
