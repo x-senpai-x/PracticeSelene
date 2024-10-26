@@ -148,13 +148,13 @@ type ContextStatefulPrecompileMut interface {
 }
 type PrecompileResult struct {
 	output *PrecompileOutput
-	err    PrecompileError//Doubt
+	err    PrecompileErrorStruct//Doubt
 }
 type PrecompileOutput struct {
 	GasUsed uint64
 	Bytes   []byte
 }
-type PrecompileError struct {
+type PrecompileErrorStruct struct {
 	errorType string
 	message   string
 }
@@ -175,7 +175,7 @@ const (
 )
 
 // Error implementation for PrecompileError
-func (e PrecompileError) Error() string {
+func (e PrecompileErrorStruct) Error() string {
 	if e.message != "" {
 		return e.message
 	}

@@ -1,5 +1,5 @@
 package evm
-func NewJournalState(spec specs.SpecId,warmPreloadedAddresses map[common.Address]struct{}) JournaledState {
+func NewJournalState(spec specs.SpecId,warmPreloadedAddresses map[Address]struct{}) JournaledState {
 	return JournaledState{
 		State: nil,
 		TransientStorage: nil,
@@ -14,5 +14,5 @@ type JournaledState struct {
 	Depth uint
 	Journal [][]JournalEntry
 	Spec specs.SpecId
-	WarmPreloadedAddresses map[common.Address]struct{}
+	WarmPreloadedAddresses map[Address]struct{}
 }

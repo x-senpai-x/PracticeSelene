@@ -1,7 +1,11 @@
 package evm
-import(
-	"github.com/BlocSoc-iitr/selene/common"
+
+import (
+	"encoding/json"
 	"math/big"
+	"sync"
+
+	"github.com/BlocSoc-iitr/selene/common"
 )
 type EvmBuilder struct {
 	context Context
