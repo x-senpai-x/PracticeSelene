@@ -1,16 +1,16 @@
 package evm
 import (
-	"encoding/json"
-	"fmt"
+	// "encoding/json"
+	// "fmt"
 	"sync"
 )
 type Context[EXT interface{}, DB Database] struct {
 	Evm EvmContext [DB]
 	External interface{}
 }
-func DefaultContext[EXT interface{}, DB Database]() Context[EXT, DB] {
+func DefaultContext[EXT interface{}, DB Database](db DB) Context[EXT, DB] {
     return Context[EXT, DB]{
-        Evm:     NewEvmContext(),
+        Evm:     NewEvmContext(db),
         External: nil,
     }
 }
@@ -25,8 +25,9 @@ func (js JournaledState) SetSpecId(SpecId){
 }
 //To be reviewed
 func NewInnerEvmContext[DB Database](db DB) InnerEvmContext[DB] {
+	env := NewEnv()
 	return InnerEvmContext[DB]{
-		Env: NewEnv(),
+		Env: env,
 		JournaledState: nil,//to be changed
 		DB: db,
 		Error: nil,
@@ -58,7 +59,7 @@ type L1BlockInfo struct {
 	L1BlobBaseFeeScalar *U256
 	EmptyScalars bool
 }
-type ContextPrecompiles struct {
+type ContextPrecompiles[DB Database] struct {
 	Inner PrecompilesCow
 }
 func DefaultContextPrecompiles() ContextPrecompiles {

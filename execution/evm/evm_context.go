@@ -1,5 +1,25 @@
 package evm
-func (e *EvmContext) SetPrecompiles(precompiles ContextPrecompiles) {
+
+type EvmContext[DB Database] struct {
+	Inner InnerEvmContext[DB]
+	Precompiles ContextPrecompiles[DB]
+}
+func NewEvmContext[DB Database](db DB) EvmContext[DB] {
+	return EvmContext[DB]{
+		Inner: NewInnerEvmContext(db),
+		Precompiles: DefaultContextPrecompiles(),
+	}
+}
+type InnerEvmContext[DB Database] struct {
+    Env                    *Env
+    JournaledState        JournaledState
+    DB                     Database
+    Error                  error
+    ValidAuthorizations    []Address
+    L1BlockInfo           *L1BlockInfo // For optimism feature
+}
+
+func (e *EvmContext[DB]) SetPrecompiles(precompiles ContextPrecompiles[DB]) {
 	for i, address := range precompiles.Inner.StaticRef.Addresses {
 		e.Inner.JournaledState.WarmPreloadedAddresses[i] = address
 	}
