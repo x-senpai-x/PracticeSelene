@@ -11,7 +11,11 @@ import (
 	"math/big"
 	"reflect"
 )
-
+type AccessListItem struct {
+	Address     seleneCommon.Address //I used Common here instead of common
+	StorageKeys []B256
+}
+type AccessList []AccessListItem
 type FeeHistory struct {
 	BaseFeePerGas []hexutil.Big
 	GasUsedRatio  []float64
@@ -43,8 +47,8 @@ type Account struct {
 	Slots       map[common.Hash]*big.Int
 }
 type CallOpts struct {
-	From     *common.Address `json:"from,omitempty"`
-	To       *common.Address `json:"to,omitempty"`
+	From     *seleneCommon.Address `json:"from,omitempty"`
+	To       *seleneCommon.Address `json:"to,omitempty"`
 	Gas      *big.Int        `json:"gas,omitempty"`
 	GasPrice *big.Int        `json:"gasPrice,omitempty"`
 	Value    *big.Int        `json:"value,omitempty"`

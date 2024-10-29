@@ -50,17 +50,17 @@ func (h *HttpRpc) GetProof(address *common.Address, slots *[]common.Hash, block 
 	return result.proof, nil
 }
 
-func (h *HttpRpc) CreateAccessList(opts CallOpts, block seleneCommon.BlockTag) (types.AccessList, error) {
+func (h *HttpRpc) CreateAccessList(opts CallOpts, block seleneCommon.BlockTag) (AccessList, error) {
 	resultChan := make(chan struct {
-		accessList types.AccessList
+		accessList AccessList
 		err        error
 	})
 
 	go func() {
-		var accessList types.AccessList
+		var accessList AccessList
 		err := h.provider.Call(&accessList, "eth_createAccessList", opts, block)
 		resultChan <- struct {
-			accessList types.AccessList
+			accessList AccessList
 			err        error
 		}{accessList, err}
 		close(resultChan)
