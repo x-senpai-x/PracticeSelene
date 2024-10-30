@@ -2,11 +2,13 @@
 // +build optimism
 
 package evm
-
-const isOptimismEnabled = true
 import (
 	"encoding/json"
+	"fmt"
+	"math/big"
 )
+const isOptimismEnabled = true
+
 type TxEnv struct {
     // Caller aka Author aka transaction signer
     Caller Address `json:"caller"`
@@ -39,12 +41,7 @@ type TxEnv struct {
     // Optimism fields (only included when build tag is set)
     Optimism OptimismFields `json:"optimism,omitempty"`
 }
-func TryFromUint8(specID uint8) (SpecId, bool) {
-	if specID > uint8(PRAGUE_EOF) && specID != uint8(LATEST) {
-		return 0, false
-	}
-	return SpecId(specID), true
-}
+
 type SpecId uint8
 
 const (
