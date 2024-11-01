@@ -12,7 +12,7 @@ import (
 	"reflect"
 )
 type AccessListItem struct {
-	Address     seleneCommon.Address //I used Common here instead of common
+	Address     seleneCommon.Address 
 	StorageKeys []B256
 }
 type AccessList []AccessListItem
@@ -25,18 +25,18 @@ type FeeHistory struct {
 
 // defined storage proof	and EIP1186ProofResponse structs
 type StorageProof struct {
-	Key   common.Hash
-	Proof []hexutil.Bytes
-	Value *uint256.Int
+	Key   common.Hash     `json:"key"`
+	Proof []hexutil.Bytes `json:"proof"`
+	Value *uint256.Int    `json:"value"`
 }
 type EIP1186ProofResponse struct {
-	Address      seleneCommon.Address
-	Balance      *uint256.Int
-	CodeHash     common.Hash
-	Nonce        uint64
-	StorageHash  common.Hash
-	AccountProof []hexutil.Bytes
-	StorageProof []StorageProof
+	Address      common.Address  `json:"address"`
+	Balance      *uint256.Int    `json:"balance"`
+	CodeHash     common.Hash     `json:"codeHash"`
+	Nonce        hexutil.Uint64  `json:"nonce"`
+	StorageHash  common.Hash     `json:"storageHash"`
+	AccountProof []hexutil.Bytes `json:"accountProof"`
+	StorageProof []StorageProof  `json:"storageProof"`
 }
 type Account struct {
 	Balance     *big.Int
@@ -44,7 +44,12 @@ type Account struct {
 	CodeHash    common.Hash
 	Code        []byte
 	StorageHash common.Hash
-	Slots       map[common.Hash]*big.Int
+	Slots       []Slot
+}
+// This is to help in unmarshaling values from rpc response
+type Slot struct {
+	Key   common.Hash // The key (slot)
+	Value *big.Int    // The value (storage value)
 }
 type CallOpts struct {
 	From     *seleneCommon.Address `json:"from,omitempty"`

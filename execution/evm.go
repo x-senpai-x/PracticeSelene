@@ -208,7 +208,7 @@ func (e *EvmState) UpdateState() error {
 
     switch {
     case access.Basic != nil:
-        account, err := e.Execution.GetAccount(access.Basic, []Common.Hash{}, e.Block)
+        account, err := e.Execution.GetAccount(access.Basic, &[]Common.Hash{}, e.Block)
         if err != nil {
             return err
         }
@@ -224,29 +224,37 @@ func (e *EvmState) UpdateState() error {
         }
         e.Basic[*access.Basic] = accountInfo
         e.mu.Unlock()
-    case access.Storage != nil:
-        slotHash := Common.BytesToHash(access.Storage.Slot.Bytes())
-        slots := []Common.Hash{slotHash}
-        account, err := e.Execution.GetAccount(&access.Storage.Address, slots, e.Block)
-        if err != nil {
-            return err
-        }
-        e.mu.Lock()
-        storage, ok := e.Storage[access.Storage.Address]
-        if !ok {
-            storage = make(map[U256]U256)
-            e.Storage[access.Storage.Address] = storage
-        }
-        
-        slotValue, exists := account.Slots[slotHash]
-        if !exists {
-            e.mu.Unlock()
-            return fmt.Errorf("storage slot %v not found in account", slotHash)
-        }
-        
-        value := U256FromBigEndian(slotValue.Bytes())
-        storage[access.Storage.Slot] = value
-        e.mu.Unlock()
+	case access.Storage != nil:
+		slotHash := Common.BytesToHash(access.Storage.Slot.Bytes())
+		slots := []Common.Hash{slotHash}
+		account, err := e.Execution.GetAccount(&access.Storage.Address, &slots, e.Block)
+		if err != nil {
+			return err
+		}
+		e.mu.Lock()
+		storage, ok := e.Storage[access.Storage.Address]
+		if !ok {
+			storage = make(map[U256]U256)
+			e.Storage[access.Storage.Address] = storage
+		}
+	
+		var slotValue *big.Int
+		found := false
+		for _, slot := range account.Slots {
+			if slot.Key == slotHash {
+				slotValue = slot.Value
+				found = true
+				break
+			}
+		}
+		if !found {
+			e.mu.Unlock()
+			return fmt.Errorf("storage slot %v not found in account", slotHash)
+		}
+	
+		value := U256FromBigEndian(slotValue.Bytes())
+		storage[access.Storage.Slot] = value
+		e.mu.Unlock()
 
     case access.BlockHash != nil:
         block, err := e.Execution.GetBlock(BlockTag{Number: *access.BlockHash}, false)
@@ -277,7 +285,7 @@ func (e *EvmState) GetBasic(address Address) (Gevm.AccountInfo, error) {
 
     if exists {
         return account, nil
-    }
+    }	
 
     e.mu.Lock()
     e.Access = &StateAccess{Basic: &address}
@@ -330,7 +338,6 @@ func (e *EvmState) GetBlockHash(block uint64) (B256, error) {
 
     return B256{}, fmt.Errorf("state missing")
 }
-
 // PrefetchState prefetches state data
 func (e *EvmState) PrefetchState(opts *CallOpts) error {
     list, err := e.Execution.Rpc.CreateAccessList(*opts, e.Block)
@@ -394,7 +401,7 @@ func (e *EvmState) PrefetchState(opts *CallOpts) error {
             semaphore <- struct{}{} // Acquire
             defer func() { <-semaphore }() // Release
 
-            account, err := e.Execution.GetAccount(&item.Address, item.StorageKeys, e.Block)
+            account, err := e.Execution.GetAccount(&item.Address, &item.StorageKeys, e.Block)
             resultChan <- accountResult{
                 address: item.Address,
                 account: account,
@@ -435,55 +442,17 @@ func (e *EvmState) PrefetchState(opts *CallOpts) error {
             e.Storage[address] = storage
         }
 
-        for slot, value := range account.Slots {
-            slotHash := B256FromSlice(slot[:])
-            valueU256 := ConvertU256(value)
-            storage[U256FromBytes(slotHash.Bytes())] = valueU256
-        }
+        for _, slot := range account.Slots {
+			slotHash := U256FromBytes(slot.Key.Bytes())
+			valueU256 := ConvertU256(slot.Value)
+			storage[slotHash] = valueU256
+		}
     }
 
     return nil
 }
 func U256FromBytes(b []byte) U256 {
     return new(big.Int).SetBytes(b)
-}
-func U256FromBigEndian(b []byte) *big.Int {
-    if len(b) != 32 {
-        return nil // or handle the error appropriately
-    }
-    return new(big.Int).SetBytes(b)
-}
-func (db *ProofDB) Basic(address Address) (Gevm  .AccountInfo, error) {
-	if isPrecompile(address) {
-		return Gevm  .AccountInfo{}, nil // Return a default AccountInfo
-	}
-	//logging.Trace("fetch basic evm state for address", zap.String("address", address.Hex()))
-	logging.Trace("fetch basic evm state for address", zap.String("address",hex.EncodeToString(address.Addr[:]) ))
-	return db.State.GetBasic(address)
-}
-
-func (db *ProofDB) BlockHash(number uint64) (B256, error) {
-	logging.Trace("fetch block hash for block number", zap.Uint64("number", number))
-	return db.State.GetBlockHash(number)
-}
-func (db *ProofDB) Storage(address Address, slot *big.Int) (*big.Int, error) {
-	logging.Trace("fetch storage for address and slot",
-		zap.String("address",hex.EncodeToString(address.Addr[:]) ),
-		zap.String("slot", slot.String()))
-	return db.State.GetStorage(address, slot)
-}
-func (db *ProofDB) CodeByHash(_ B256) (Gevm.Bytecode, error) {
-    return Gevm  .Bytecode{}, errors.New("should never be called")
-}
-func isPrecompile(address Address) bool {
-    precompileAddress := Common.BytesToAddress([]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x09})
-	zeroAddress := common.Address{}
-	return bytes.Compare(address.Addr[:], precompileAddress[:]) <= 0 && bytes.Compare(address.Addr[:], zeroAddress.Addr[:]) > 0
-}
-type Bytecode []byte
-
-func NewBytecodeRaw(code []byte) hexutil.Bytes {
-	return hexutil.Bytes(code)
 }
 func B256FromSlice(slice []byte) Common.Hash {
 	return Common.BytesToHash(slice)
@@ -500,3 +469,43 @@ func NewRawBytecode(raw []byte) Gevm.Bytecode {
 		LegacyRaw: raw,
 	}
 }
+func U256FromBigEndian(b []byte) *big.Int {
+    if len(b) != 32 {
+        return nil // or handle the error appropriately
+    }
+    return new(big.Int).SetBytes(b)
+}
+func NewBytecodeRaw(code []byte) hexutil.Bytes {
+	return hexutil.Bytes(code)
+}
+
+
+
+func isPrecompile(address Address) bool {
+    precompileAddress := Common.BytesToAddress([]byte{0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x09})
+	zeroAddress := common.Address{}
+	return bytes.Compare(address[:], precompileAddress[:]) <= 0 && bytes.Compare(address[:], zeroAddress[:]) > 0
+}
+//ProofDb implements the Gevm.DB interface
+func (db *ProofDB) Basic(address Address) (Gevm  .AccountInfo, error) {
+	if isPrecompile(address) {
+		return Gevm  .AccountInfo{}, nil // Return a default AccountInfo
+	}
+	//logging.Trace("fetch basic evm state for address", zap.String("address", address.Hex()))
+	logging.Trace("fetch basic evm state for address", zap.String("address",hex.EncodeToString(address[:]) ))
+	return db.State.GetBasic(address)
+}
+func (db *ProofDB) BlockHash(number uint64) (B256, error) {
+	logging.Trace("fetch block hash for block number", zap.Uint64("number", number))
+	return db.State.GetBlockHash(number)
+}
+func (db *ProofDB) Storage(address Address, slot *big.Int) (*big.Int, error) {
+	logging.Trace("fetch storage for address and slot",
+		zap.String("address",hex.EncodeToString(address[:]) ),
+		zap.String("slot", slot.String()))
+	return db.State.GetStorage(address, slot)
+}
+func (db *ProofDB) CodeByHash(_ B256) (Gevm.Bytecode, error) {
+    return Gevm.Bytecode{}, errors.New("should never be called")
+}
+
