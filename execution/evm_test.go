@@ -633,6 +633,38 @@ func TestPrefetchState(t *testing.T) {
 	}
 }
 
+func TestGetEnv(t *testing.T) {
+	exec := CreateNewExecutionClient()
+	block := common.Block{
+		Number: 1,
+		Timestamp: 5,
+		Difficulty: uint256.Int{1},
+		Miner: common.Address{0x11},
+	}
+	exec.state.PushBlock(&block)
+	evm := NewEvm(exec, 1, common.BlockTag{})
+	
+	opts := CallOpts{
+		From: &common.Address{0x11},
+		To: &common.Address{0x12},
+		Gas: big.NewInt(1),
+		GasPrice: big.NewInt(2),
+		Value: big.NewInt(3),
+		Data: []byte{0x13},
+	}
+
+	env := evm.getEnv(&opts, common.BlockTag{Number: 1})
+	assert.Equal(t, *opts.From, env.Tx.Caller, "Not Equal")
+	assert.Equal(t, opts.Value, env.Tx.Value, "Not Equal")
+	assert.Equal(t, opts.Gas.Uint64(), env.Tx.GasLimit, "Not Equal")
+	assert.Equal(t, opts.GasPrice, env.Tx.GasPrice, "Not Equal")
+	assert.Equal(t, big.NewInt(int64(block.Number)), env.Block.Number, "Not Equal")
+	assert.Equal(t, block.Miner, env.Block.Coinbase, "Not Equal")
+	assert.Equal(t, big.NewInt(int64(block.Timestamp)), env.Block.Timestamp, "Not Equal")
+	assert.Equal(t, block.Difficulty.ToBig(), env.Block.Difficulty, "Not Equal")
+	assert.Equal(t, evm.chainID, env.Cfg.ChainID, "Not Equal")
+}
+
 /*
 
 // Mock RPC client for testing
@@ -649,14 +681,14 @@ func (m *MockRPCClient) New(rpc *string) (ExecutionRpc, error) {
     return m, nil
 }
 
-func (m *MockRPCClient) GetProof(address *seleneCommon.Address, slots *[]common.Hash, block uint64) (EIP1186ProofResponse, error) {
+func (m *MockRPCClient) GetProof(address *common.Address, slots *[]common.Hash, block uint64) (EIP1186ProofResponse, error) {
     if m.err != nil {
         return EIP1186ProofResponse{}, m.err
     }
     return m.proof, nil
 }
 
-func (m *MockRPCClient) GetCode(address *seleneCommon.Address, block uint64) ([]byte, error) {
+func (m *MockRPCClient) GetCode(address *common.Address, block uint64) ([]byte, error) {
     if m.err != nil {
         return nil, m.err
     }
@@ -1502,3 +1534,122 @@ func TestIsPrecompile(t *testing.T) {
 		})
 	}
 }*/
+
+func CreateNewState() *State {
+    blockChan := make(chan *common.Block)
+    finalizedBlockChan := make(chan *common.Block)
+
+    state := NewState(5, blockChan, finalizedBlockChan)
+
+    // Simulate blocks to push
+    block1 := &common.Block{
+        Number: 1,
+        Hash:   [32]byte{0x1},
+        Transactions: common.Transactions{
+            Hashes: [][32]byte{{0x11}, {0x12}},
+        },
+    }
+    block2 := &common.Block{
+        Number: 2,
+        Hash:   [32]byte{0x2},
+        Transactions: common.Transactions{
+            Hashes: [][32]byte{{0x21}, {0x22}},
+            Full: []common.Transaction{
+                {
+                    Hash: Common.Hash([32]byte{0x21}),
+                    GasPrice: hexutil.Big(*hexutil.MustDecodeBig("0x12345")),
+                    Gas: hexutil.Uint64(5),
+                    MaxFeePerGas: hexutil.Big(*hexutil.MustDecodeBig("0x12345")),
+            },
+                {Hash: Common.Hash([32]byte{0x22})},
+            },
+        },
+    }
+
+    block3 := &common.Block{
+        Number: 1000000,
+        Hash:   Common.HexToHash("0x8e38b4dbf6b11fcc3b9dee84fb7986e29ca0a02cecd8977c161ff7333329681e"),
+        Transactions: common.Transactions{
+            Hashes: [][32]byte{
+                Common.HexToHash("0xe9e91f1ee4b56c0df2e9f06c2b8c27c6076195a88a7b8537ba8313d80e6f124e"),
+                Common.HexToHash("0xea1093d492a1dcb1bef708f771a99a96ff05dcab81ca76c31940300177fcf49f"),
+                },
+            Full: []common.Transaction{
+                {
+                    Hash: Common.HexToHash("0xe9e91f1ee4b56c0df2e9f06c2b8c27c6076195a88a7b8537ba8313d80e6f124e"),
+                    GasPrice: hexutil.Big(*hexutil.MustDecodeBig("0x12345")),
+                    Gas: hexutil.Uint64(60),
+                    MaxFeePerGas: hexutil.Big(*hexutil.MustDecodeBig("0x12345")),
+            },
+            {
+                Hash: Common.HexToHash("0xea1093d492a1dcb1bef708f771a99a96ff05dcab81ca76c31940300177fcf49f"),
+                GasPrice: hexutil.Big(*hexutil.MustDecodeBig("0x12345")),
+                Gas: hexutil.Uint64(60),
+                MaxFeePerGas: hexutil.Big(*hexutil.MustDecodeBig("0x12345")),
+        },
+            },
+        },
+    }
+
+    // Push blocks through channel
+    go func() {
+        blockChan <- block1
+        blockChan <- block2
+        blockChan <- block3
+        close(blockChan)
+    }()
+
+    // Allow goroutine to process the blocks
+    wg := sync.WaitGroup{}
+    wg.Add(1)
+    go func() {
+        defer wg.Done()
+        for len(state.blocks) < 3 {
+            // wait for blocks to be processed
+        }
+    }()
+
+    wg.Wait()
+
+    // Simulate finalized block
+    finalizedBlock := &common.Block{
+        Number: 2,
+        Hash:   [32]byte{0x2},
+        Transactions: common.Transactions{
+            Hashes: [][32]byte{{0x21}, {0x22}},
+            Full: []common.Transaction{
+                {
+                    Hash: Common.Hash([32]byte{0x21}),
+                    GasPrice: hexutil.Big(*hexutil.MustDecodeBig("0x12345")),
+                    Gas: hexutil.Uint64(5),
+                    MaxFeePerGas: hexutil.Big(*hexutil.MustDecodeBig("0x12345")),
+            },
+                {Hash: Common.Hash([32]byte{0x22})},
+            },
+        },
+    }
+    go func() {
+        finalizedBlockChan <- finalizedBlock
+        close(finalizedBlockChan)
+    }()
+
+    // Wait for finalized block to be processed
+    wg.Add(1)
+    go func() {
+        defer wg.Done()
+        for state.finalizedBlock == nil {
+            // wait for finalized block to be processed
+        }
+    }()
+    wg.Wait()
+
+    return state
+}
+func CreateNewExecutionClient() *ExecutionClient {
+	rpc := "https://eth-mainnet.g.alchemy.com/v2/j28GcevSYukh-GvSeBOYcwHOfIggF1Gt"
+    state := CreateNewState()
+	var executionClient *ExecutionClient
+	executionClient, _ = executionClient.New(rpc, state)
+
+	return executionClient
+}
