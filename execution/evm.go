@@ -383,11 +383,11 @@ func (e *EvmState) PrefetchState(opts *CallOpts) error {
 
 	// Create access entries
 	fromAccessEntry := AccessListItem{
-		Address:     *opts.From,
+		Address:     [20]byte(*opts.From),
 		StorageKeys: make([]common.Hash, 0),
 	}
 	toAccessEntry := AccessListItem{
-		Address:     *opts.To,
+		Address:     [20]byte(*opts.To),
 		StorageKeys: make([]common.Hash, 0),
 	}
 
@@ -397,25 +397,25 @@ func (e *EvmState) PrefetchState(opts *CallOpts) error {
 	}
 
 	producerAccessEntry := AccessListItem{
-		Address:     block.Miner,
+		Address:     [20]byte(block.Miner),
 		StorageKeys: make([]common.Hash, 0),
 	}
 
 	// Use a map for O(1) lookup of addresses
 	listAddresses := make(map[Address]struct{})
-	for _, item := range list {
-		listAddresses[item.Address] = struct{}{}
+	for _, item := range list.AccessList {
+		listAddresses[[20]byte(item.Address)] = struct{}{}
 	}
 
 	// Add missing entries
-	if _, exists := listAddresses[fromAccessEntry.Address]; !exists {
-		list = append(list, fromAccessEntry)
+	if _, exists := listAddresses[[20]byte(fromAccessEntry.Address)]; !exists {
+		list.AccessList = append(list.AccessList, fromAccessEntry)
 	}
-	if _, exists := listAddresses[toAccessEntry.Address]; !exists {
-		list = append(list, toAccessEntry)
+	if _, exists := listAddresses[[20]byte(toAccessEntry.Address)]; !exists {
+		list.AccessList = append(list.AccessList, toAccessEntry)
 	}
-	if _, exists := listAddresses[producerAccessEntry.Address]; !exists {
-		list = append(list, producerAccessEntry)
+	if _, exists := listAddresses[[20]byte(producerAccessEntry.Address)]; !exists {
+		list.AccessList = append(list.AccessList, producerAccessEntry)
 	}
 
 	// Process accounts in parallel with bounded concurrency
@@ -426,20 +426,20 @@ func (e *EvmState) PrefetchState(opts *CallOpts) error {
 	}
 
 	batchSize := PARALLEL_QUERY_BATCH_SIZE
-	resultChan := make(chan accountResult, len(list))
+	resultChan := make(chan accountResult, len(list.AccessList))
 	semaphore := make(chan struct{}, batchSize)
 
 	var wg sync.WaitGroup
-	for _, item := range list {
+	for _, item := range list.AccessList {
 		wg.Add(1)
 		go func(item AccessListItem) {
 			defer wg.Done()
 			semaphore <- struct{}{}        // Acquire
 			defer func() { <-semaphore }() // Release
 
-			account, err := e.Execution.GetAccount(&item.Address, &item.StorageKeys, e.Block)
+			account, err := e.Execution.GetAccount((*seleneCommon.Address)(item.Address[:]), &item.StorageKeys, e.Block)
 			resultChan <- accountResult{
-				address: item.Address,
+				address: [20]byte(item.Address),
 				account: account,
 				err:     err,
 			}
@@ -1208,30 +1208,49 @@ func (h *HttpRpc) CreateAccessList(opts CallOpts, block seleneCommon.BlockTag) (
 		err        error
 	})
 	callOpts := struct {
-		From     string
-		To       string
-		Gas      hexutil.Big
-		GasPrice hexutil.Big
-		Value    hexutil.Big
-		Data     []byte
+		From     string        `json:"from"`
+		To       string        `json:"to"`
+		Gas      *hexutil.Big  `json:"gas,omitempty"`
+		GasPrice *hexutil.Big  `json:"gasPrice,omitempty"`
+		Value    *hexutil.Big  `json:"value,omitempty"`
+		Data     string        `json:"data,omitempty"`
 	}{
-		From: func() string{
+		From: func() string {
 			if opts.From != nil {
-				return hex.EncodeToString(opts.From[:])
+				return "0x" + hex.EncodeToString(opts.From[:])
 			}
 			return ""
 		}(),
-		To: func() string{
+		To: func() string {
 			if opts.To != nil {
-				return hex.EncodeToString(opts.To[:])
+				return "0x" + hex.EncodeToString(opts.To[:])
 			}
-			return ""
-		}()
-	}
+			return "" // or handle cases where `to` is missing if necessary
+		}(),
+		Gas: func() *hexutil.Big {
+			if opts.Gas != nil {
+				return (*hexutil.Big)(opts.Gas)
+			}
+			return nil
+		}(),
+		GasPrice: func() *hexutil.Big {
+			if opts.GasPrice != nil {
+				return (*hexutil.Big)(opts.GasPrice)
+			}
+			return nil
+		}(),
+		Value: func() *hexutil.Big {
+			if opts.Value != nil {
+				return (*hexutil.Big)(opts.Value)
+			}
+			return nil
+		}(),
+		Data: hex.EncodeToString(opts.Data),
+	}	
 
 	go func() {
 		var accessList AccessList
-		err := h.provider.Call(&accessList, "eth_createAccessList", opts, block.String())
+		err := h.provider.Call(&accessList, "eth_createAccessList", callOpts, block.String())
 		resultChan <- struct {
 			accessList AccessList
 			err        error
@@ -1241,7 +1260,7 @@ func (h *HttpRpc) CreateAccessList(opts CallOpts, block seleneCommon.BlockTag) (
 
 	result := <-resultChan
 	if result.err != nil {
-		return nil, result.err
+		return AccessList{}, result.err
 	}
 	return result.accessList, nil
 }
@@ -2140,10 +2159,13 @@ func DecodeRevertReason(data []byte) string {
 //
 // )
 type AccessListItem struct {
-	Address     seleneCommon.Address
-	StorageKeys []B256
+	Address     common.Address `json:"address"`
+	StorageKeys []B256         `json:"storageKeys"`
 }
-type AccessList []AccessListItem
+type AccessList struct {
+	AccessList []AccessListItem `json:"accessList"`
+	GasUsed    hexutil.Bytes    `json:"gasUsed"`
+}
 type FeeHistory struct {
 	BaseFeePerGas []hexutil.Big
 	GasUsedRatio  []float64
