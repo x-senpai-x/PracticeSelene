@@ -9,6 +9,8 @@ import (
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/holiman/uint256"
+	"errors"
+	"encoding/hex"
 )
 type Address [20]byte
 type Block struct {
@@ -50,7 +52,7 @@ type Transaction struct {
 	BlockHash            string           `json:"blockHash"`   // Pointer because it's nullable
 	BlockNumber          hexutil.Uint64   `json:"blockNumber"` // Pointer because it's nullable
 	TransactionIndex     hexutil.Uint64   `json:"transactionIndex"`
-	From                 common.Address           `json:"from"`
+	From                 common.Address   `json:"from"`
 	To                   *common.Address  `json:"to"` // Pointer because 'to' can be null for contract creation
 	Value                hexutil.Big      `json:"value"`
 	GasPrice             hexutil.Big      `json:"gasPrice"`
@@ -153,3 +155,25 @@ func parseDecimalUint64(decStr string) (uint64, error) {
 
 // Example error structs can be defined here
 // type BlockNotFoundError struct {}
+func (a *Address) UnmarshalJSON(data []byte) error {
+    // Expecting a JSON string like `"0x1234567890abcdef1234567890abcdef12345678"`
+    if len(data) != 42+2 { // 2 for the surrounding quotes, 42 for the 0x-prefixed address
+        return errors.New("invalid address length")
+    }
+
+    // Remove the surrounding quotes and `0x` prefix
+    hexStr := string(data[3 : len(data)-1]) // skip "0x" prefix
+
+    // Decode hex string into the address array
+    decoded, err := hex.DecodeString(hexStr)
+    if err != nil {
+        return err
+    }
+
+    if len(decoded) != len(a) {
+        return errors.New("decoded address length mismatch")
+    }
+
+    copy(a[:], decoded)
+    return nil
+}

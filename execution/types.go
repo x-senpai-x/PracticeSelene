@@ -15,7 +15,11 @@ type AccessListItem struct {
 	Address     seleneCommon.Address 
 	StorageKeys []B256
 }
-type AccessList []AccessListItem
+type AccessList struct {
+	AccessList []AccessListItem `json:"accessList"`
+	GasUsed    hexutil.Bytes    `json:"gasUsed"`
+}
+//type AccessList []AccessListItem
 type FeeHistory struct {
 	BaseFeePerGas []hexutil.Big
 	GasUsedRatio  []float64

@@ -367,19 +367,19 @@ func (e *EvmState) PrefetchState(opts *CallOpts) error {
 
     // Use a map for O(1) lookup of addresses
     listAddresses := make(map[Address]struct{})
-    for _, item := range list {
+    for _, item := range list.AccessList {
         listAddresses[item.Address] = struct{}{}
     }
 
     // Add missing entries
     if _, exists := listAddresses[fromAccessEntry.Address]; !exists {
-        list = append(list, fromAccessEntry)
+        list.AccessList = append(list.AccessList, fromAccessEntry)
     }
     if _, exists := listAddresses[toAccessEntry.Address]; !exists {
-        list = append(list, toAccessEntry)
+        list.AccessList = append(list.AccessList, toAccessEntry)
     }
     if _, exists := listAddresses[producerAccessEntry.Address]; !exists {
-        list = append(list, producerAccessEntry)
+        list.AccessList = append(list.AccessList, producerAccessEntry)
     }
 
     // Process accounts in parallel with bounded concurrency
@@ -390,11 +390,11 @@ func (e *EvmState) PrefetchState(opts *CallOpts) error {
     }
 
     batchSize := PARALLEL_QUERY_BATCH_SIZE
-    resultChan := make(chan accountResult, len(list))
+    resultChan := make(chan accountResult, len(list.AccessList))
     semaphore := make(chan struct{}, batchSize)
 
     var wg sync.WaitGroup
-    for _, item := range list {
+    for _, item := range list.AccessList {
         wg.Add(1)
         go func(item AccessListItem) {
             defer wg.Done()
