@@ -26,7 +26,7 @@ type JournalCheckpoint struct {
 	Log_i     uint
 	Journal_i uint
 }
-func (j JournaledState)setSpecId(spec SpecId) {
+func (j *JournaledState) setSpecId(spec SpecId) {
 	j.Spec = spec
 }
 type TransientStorage map[Key]U256
@@ -47,4 +47,10 @@ type LogData struct {
 	// The plain data.
 	Data Bytes `json:"data"`
 }
+func (l *Log[LogData]) UnmarshalJSON(data []byte) error {
+	return unmarshalJSON(data, l)
+}
 
+func (l *LogData) UnmarshalJSON(data []byte) error {
+	return unmarshalJSON(data, l)
+}

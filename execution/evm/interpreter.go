@@ -1,6 +1,5 @@
 package evm
 import (
-	"encoding/json"
 	"math"
 )
 type Interpreter struct {
@@ -96,20 +95,7 @@ const (
 	EofAuxDataTooSmall
 	InvalidEXTCALLTarget
 )
-// MarshalJSON customizes the JSON serialization of InstructionResult.
-func (ir InstructionResult) MarshalJSON() ([]byte, error) {
-	return json.Marshal(uint8(ir))
-}
 
-// UnmarshalJSON customizes the JSON deserialization of InstructionResult.
-func (ir *InstructionResult) UnmarshalJSON(data []byte) error {
-	var value uint8
-	if err := json.Unmarshal(data, &value); err != nil {
-		return err
-	}
-	*ir = InstructionResult(value)
-	return nil
-}
 type SharedMemory struct {
 	Buffer         []byte
 	Checkpoints    []int
@@ -169,28 +155,13 @@ type FunctionStack struct {
 }
 
 // MarshalJSON customizes the JSON serialization of FunctionStack.
-func (fs FunctionStack) MarshalJSON() ([]byte, error) {
-	return json.Marshal(struct {
-		ReturnStack    []FunctionReturnFrame `json:"return_stack"`
-		CurrentCodeIdx uint64                `json:"current_code_idx"`
-	}{
-		ReturnStack:    fs.ReturnStack,
-		CurrentCodeIdx: fs.CurrentCodeIdx,
-	})
+func (fs *FunctionStack) MarshalJSON() ([]byte, error) {
+	return marshalJSON(fs)
 }
 
-// UnmarshalJSON customizes the JSON deserialization of FunctionStack.
+// UnmarshalJSON customizes the JSON deserialization of InstructionResult.
 func (fs *FunctionStack) UnmarshalJSON(data []byte) error {
-	var temp struct {
-		ReturnStack    []FunctionReturnFrame `json:"return_stack"`
-		CurrentCodeIdx uint64                `json:"current_code_idx"`
-	}
-	if err := json.Unmarshal(data, &temp); err != nil {
-		return err
-	}
-	fs.ReturnStack = temp.ReturnStack
-	fs.CurrentCodeIdx = temp.CurrentCodeIdx
-	return nil
+	return unmarshalJSON(data,fs)
 }
 
 // FunctionReturnFrame represents a frame in the function return stack for the EVM interpreter.
@@ -201,28 +172,11 @@ type FunctionReturnFrame struct {
 	PC uint64 `json:"pc"` // Changed to uint64 to match Rust's usize
 }
 
-// MarshalJSON customizes the JSON serialization of FunctionReturnFrame.
-func (frf FunctionReturnFrame) MarshalJSON() ([]byte, error) {
-	return json.Marshal(struct {
-		Idx uint64 `json:"idx"`
-		PC  uint64 `json:"pc"`
-	}{
-		Idx: frf.Idx,
-		PC:  frf.PC,
-	})
+func (frf *FunctionReturnFrame) MarshalJSON() ([]byte, error) {
+	return marshalJSON(frf)
 }
 
-// UnmarshalJSON customizes the JSON deserialization of FunctionReturnFrame.
+// UnmarshalJSON customizes the JSON deserialization of InstructionResult.
 func (frf *FunctionReturnFrame) UnmarshalJSON(data []byte) error {
-	var temp struct {
-		Idx uint64 `json:"idx"`
-		PC  uint64 `json:"pc"`
-	}
-	if err := json.Unmarshal(data, &temp); err != nil {
-		return err
-	}
-	frf.Idx = temp.Idx
-	frf.PC = temp.PC
-	return nil
+	return unmarshalJSON(data,frf)
 }
-

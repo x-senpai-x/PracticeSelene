@@ -1,7 +1,7 @@
 package evm
 
 import (
-	"encoding/json"
+	// "encoding/json"
 	"fmt"
 	"math/big"
 )
@@ -67,12 +67,12 @@ type CfgEnv struct {
 	PerfAnalyseCreatedBytecodes    AnalysisKind   `json:"perf_analyse_created_bytecodes"`
 	LimitContractCodeSize         *uint64        `json:"limit_contract_code_size,omitempty"`
 	MemoryLimit                   uint64         `json:"memory_limit,omitempty"` // Consider using a pointer if optional
-	DisableBalanceCheck           bool           `json:"disable_balance_check,omitempty"`
-	DisableBlockGasLimit          bool           `json:"disable_block_gas_limit,omitempty"`
-	DisableEIP3607                bool           `json:"disable_eip3607,omitempty"`
-	DisableGasRefund               bool           `json:"disable_gas_refund,omitempty"`
-	DisableBaseFee                bool           `json:"disable_base_fee,omitempty"`
-	DisableBeneficiaryReward      bool           `json:"disable_beneficiary_reward,omitempty"`
+	DisableBalanceCheck           bool           `json:"disable_balance_check"`
+	DisableBlockGasLimit          bool           `json:"disable_block_gas_limit"`
+	DisableEIP3607                bool           `json:"disable_eip3607"`
+	DisableGasRefund               bool           `json:"disable_gas_refund"`
+	DisableBaseFee                bool           `json:"disable_base_fee"`
+	DisableBeneficiaryReward      bool           `json:"disable_beneficiary_reward"`
 }
 type BlockEnv struct {
 	Number                  U256                       `json:"number"`
@@ -92,6 +92,34 @@ type EnvKzgSettings struct {
 	Mode   string                `json:"mode"`
 	Custom *KzgSettings          `json:"custom,omitempty"`
 }
+func (ce *CfgEnv) MarshalJSON() ([]byte, error) {
+	return marshalJSON(ce)
+}
+func (ce *CfgEnv) UnmarshalJSON(data []byte) error {
+	return unmarshalJSON(data,ce)
+}
+func (be *BlockEnv) MarshalJSON() ([]byte, error) {
+	return marshalJSON(be)
+}
+func (be *BlockEnv) UnmarshalJSON(data []byte) error {
+	return unmarshalJSON(data,be)
+}
+func (b *BlobExcessGasAndPrice) MarshalJSON() ([]byte, error) {
+	return marshalJSON(b)
+}
+
+// UnmarshalJSON customizes the JSON deserialization of InstructionResult.
+func (b *BlobExcessGasAndPrice) UnmarshalJSON(data []byte) error {
+	return unmarshalJSON(data,b)
+}
+func (eks *EnvKzgSettings) MarshalJSON() ([]byte, error) {
+	return marshalJSON(eks)
+}
+
+// UnmarshalJSON customizes the JSON deserialization of InstructionResult.
+func (eks *EnvKzgSettings) UnmarshalJSON(data []byte) error {
+	return unmarshalJSON(data,eks)
+}
 // KzgSettings represents custom KZG settings.
 type KzgSettings struct {
 	// Define fields for KzgSettings based on your requirements.
@@ -104,33 +132,9 @@ const (
 )
 
 // MarshalJSON customizes the JSON marshalling for AnalysisKind.
-func (ak AnalysisKind) MarshalJSON() ([]byte, error) {
-	switch ak {
-	case Raw:
-		return json.Marshal("raw")
-	case Analyse:
-		return json.Marshal("analyse")
-	default:
-		return json.Marshal("unknown")
-	}
-}
 
-// UnmarshalJSON customizes the JSON unmarshalling for AnalysisKind.
-func (ak *AnalysisKind) UnmarshalJSON(data []byte) error {
-	var s string
-	if err := json.Unmarshal(data, &s); err != nil {
-		return err
-	}
-	switch s {
-	case "raw":
-		*ak = Raw
-	case "analyse":
-		*ak = Analyse
-	default:
-		return fmt.Errorf("unknown AnalysisKind: %s", s)
-	}
-	return nil
-}
+
+
 //Not in use : To be verified
 func NewSignature(v uint8, r, s *big.Int) *Signature {
     return &Signature{

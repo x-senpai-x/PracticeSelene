@@ -15,3 +15,6 @@ type ValidateInitialTxGasHandle[DB Database] func(env *Env) (uint64, error)
 func (p *PreExecutionHandler[EXT, DB]) LoadPrecompilesFunction() ContextPrecompiles[DB] {
 	return p.LoadPrecompiles()
 }
+func (h *PreExecutionHandler[EXT, DB]) ExLoadAccounts(ctx *Context[EXT, DB]) error {
+	return h.LoadAccounts(ctx)
+}

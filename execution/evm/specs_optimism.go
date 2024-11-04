@@ -2,13 +2,11 @@
 // +build optimism
 
 package evm
+
+const isOptimismEnabled = true
 import (
 	"encoding/json"
-	"fmt"
-	"math/big"
 )
-const isOptimismEnabled = true
-
 type TxEnv struct {
     // Caller aka Author aka transaction signer
     Caller Address `json:"caller"`
@@ -31,17 +29,27 @@ type TxEnv struct {
     // List of addresses and storage keys that the transaction plans to access (EIP-2930)
     AccessList []AccessListItem `json:"access_list"`
     // The priority fee per gas (EIP-1559)
-    GasPriorityFee *big.Int `json:"gas_priority_fee,omitempty"`
+    GasPriorityFee *big.Int `json:"gas_priority_fee"`
     // The list of blob versioned hashes (EIP-4844)
     BlobHashes []B256 `json:"blob_hashes"`
     // The max fee per blob gas (EIP-4844)
-    MaxFeePerBlobGas *big.Int `json:"max_fee_per_blob_gas,omitempty"`
+    MaxFeePerBlobGas *big.Int `json:"max_fee_per_blob_gas"`
     // List of authorizations for EOA account code (EIP-7702)
-    AuthorizationList *AuthorizationList `json:"authorization_list,omitempty"`
+    AuthorizationList *AuthorizationList `json:"authorization_list"`
     // Optimism fields (only included when build tag is set)
-    Optimism OptimismFields `json:"optimism,omitempty"`
+    Optimism OptimismFields `json:"optimism"`
 }
 
+func (tx *TxEnv) UnmarshalJSON(data []byte) error {
+    return unmarshalJSON(data , tx)
+}
+    
+func TryFromUint8(specID uint8) (SpecId, bool) {
+	if specID > uint8(PRAGUE_EOF) && specID != uint8(LATEST) {
+		return 0, false
+	}
+	return SpecId(specID), true
+}
 type SpecId uint8
 
 const (
@@ -72,6 +80,21 @@ const (
     PRAGUE_EOF     SpecId = 24  // Prague+EOF
     LATEST         SpecId = 255 // LATEST = u8::MAX
 )
+var specNameToIdMap = generateSpecIdMap()
+    
+// generateSpecIdMap creates the mapping of SpecId constants to their string representations
+func generateSpecIdMap() map[string]SpecId {
+	m := make(map[string]SpecId)
+	// Loop through each valid SpecId value and use its String() representation
+	for i := SpecId(0); i <= 24; i++ {
+		m[i.String()] = i
+	}
+	// Add the "LATEST" constant separately
+	m[LATEST.String()] = LATEST
+	return m
+}
+
+
 
 // Default value for SpecId
 func DefaultSpecId() SpecId {
@@ -131,8 +154,8 @@ func (s SpecId) String() string {
         return "PRAGUE"
     case PRAGUE_EOF:
         return "PRAGUE_EOF"
-    default:
-        return "UNKNOWN"
+    case LATEST:
+        return "LATEST"
     }
 }
 type (
@@ -167,9 +190,7 @@ type (
 func (s SpecId) MarshalJSON() ([]byte, error) {
 	return json.Marshal(s.String())
 }
-
-
-
+// SpecToGeneric converts a SpecId to a generic Spec
 func SpecToGeneric(specID SpecId) interface{} {
     switch specID {
     case FRONTIER, FRONTIER_THAWING:
@@ -210,8 +231,10 @@ func SpecToGeneric(specID SpecId) interface{} {
         return EcotoneSpec{NewSpec(ECOTONE)}
     case FJORD:
         return FjordSpec{NewSpec(FJORD)}
-    default:
+    case LATEST:
         return LatestSpec{NewSpec(LATEST)}
+    default:
+        return nil
     }
 }
 
@@ -221,59 +244,12 @@ func (s *SpecId) UnmarshalJSON(data []byte) error {
         return err
     }
 
-    switch name {
-    case "FRONTIER":
-        *s = FRONTIER
-    case "FRONTIER_THAWING":
-        *s = FRONTIER_THAWING
-    case "HOMESTEAD":
-        *s = HOMESTEAD
-    case "DAO_FORK":
-        *s = DAO_FORK
-    case "TANGERINE":
-        *s = TANGERINE
-    case "SPURIOUS_DRAGON":
-        *s = SPURIOUS_DRAGON
-    case "BYZANTIUM":
-        *s = BYZANTIUM
-    case "CONSTANTINOPLE":
-        *s = CONSTANTINOPLE
-    case "PETERSBURG":
-        *s = PETERSBURG
-    case "ISTANBUL":
-        *s = ISTANBUL
-    case "MUIR_GLACIER":
-        *s = MUIR_GLACIER
-    case "BERLIN":
-        *s = BERLIN
-    case "LONDON":
-        *s = LONDON
-    case "ARROW_GLACIER":
-        *s = ARROW_GLACIER
-    case "GRAY_GLACIER":
-        *s = GRAY_GLACIER
-    case "MERGE":
-        *s = MERGE
-    case "SHANGHAI":
-        *s = SHANGHAI
-    case "CANCUN":
-        *s = CANCUN
-    case "PRAGUE":
-        *s = PRAGUE
-    case "PRAGUE_EOF":
-        *s = PRAGUE_EOF
-    case "BEDROCK":
-        *s = BEDROCK
-    case "REGOLITH":
-        *s = REGOLITH
-    case "CANYON":
-        *s = CANYON
-    case "ECOTONE":
-        *s = ECOTONE
-    case "FJORD":
-        *s = FJORD
-    default:
-        return fmt.Errorf("unknown SpecId: %s", name)
+   
+
+    if specID, ok := specNameToIdMap[name]; ok {
+        
+        s = specID
+        return nil
     }
-    return nil
+    return fmt.Errorf("unknown SpecId: %s", name)
 }

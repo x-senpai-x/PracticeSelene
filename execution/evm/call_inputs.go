@@ -1,6 +1,5 @@
 package evm
 import(
-	"encoding/json"
 )
 func (c *CallInputs) New(txEnv *TxEnv, gasLimit uint64) *CallInputs {
 	// Check if the transaction kind is Call and extract the target address.
@@ -94,34 +93,21 @@ type CallInputs struct {
 	IsStatic           bool       `json:"is_static"`
 	IsEof              bool       `json:"is_eof"`
 }
+func(ci *CallInputs) MarshalJSON()([]byte,error){
+	return marshalJSON(ci)
+}
+func (ci *CallInputs) UnmarshalJSON(data []byte) error {
+	return unmarshalJSON(data, ci)
+}
 
 // JSON serialization for CallValue
-func (cv CallValue) MarshalJSON() ([]byte, error) {
-	return json.Marshal(struct {
-		ValueType string `json:"value_type"`
-		Amount    *U256  `json:"amount,omitempty"`
-	}{
-		ValueType: cv.ValueType,
-		Amount:    &cv.Amount,
-	})
+func (cv *CallValue) MarshalJSON() ([]byte, error) {
+	return marshalJSON(cv)
 }
 
 // JSON deserialization for CallValue
 func (cv *CallValue) UnmarshalJSON(data []byte) error {
-	var aux struct {
-		ValueType string `json:"value_type"`
-		Amount    *U256  `json:"amount,omitempty"`
-	}
-	if err := json.Unmarshal(data, &aux); err != nil {
-		return err
-	}
-	cv.ValueType = aux.ValueType
-	if aux.ValueType == "transfer" {
-		cv.Amount = *aux.Amount
-	} else if aux.ValueType == "apparent" {
-		cv.Amount = *aux.Amount
-	}
-	return nil
+	return unmarshalJSON(data, cv)
 }
 
 type CreateInputs struct {
@@ -131,9 +117,23 @@ type CreateInputs struct {
 	InitCode Bytes        `json:"init_code"`
 	GasLimit uint64       `json:"gas_limit"`
 }
+func (ci *CreateInputs) MarshalJSON() ([]byte, error) {
+	return marshalJSON(ci)
+}
+func (ci *CreateInputs) UnmarshalJSON(data []byte) error {
+	return unmarshalJSON(data, ci)
+}
+
+
 type CreateScheme struct {
 	SchemeType SchemeType `json:"scheme_type"`    // can be "create" or "create2"
 	Salt       *U256      `json:"salt,omitempty"` // salt is optional for Create
+}
+func (cs *CreateScheme) MarshalJSON() ([]byte, error) {
+	return marshalJSON(cs)
+}
+func (cs *CreateScheme) UnmarshalJSON(data []byte) error {
+	return unmarshalJSON(data, cs)
 }
 
 // SchemeType represents the type of creation scheme
@@ -168,3 +168,55 @@ type EOFCreateKind struct {
 type Tx struct {
 	InitData Bytes `json:"initdata"`
 }
+/*
+// MarshalJSON customizes the JSON marshalling for EOFCreateKind.
+func (e *EOFCreateKind) MarshalJSON() ([]byte, error) {
+	switch e.Kind {
+	case TxK:
+		return json.Marshal(map[string]interface{}{
+			"type": "Tx",
+			"data": e.Data,
+		})
+	case OpcodeK:
+		return json.Marshal(map[string]interface{}{
+			"type": "Opcode",
+			"data": e.Data,
+		})
+	default:
+		return nil, fmt.Errorf("unknown EOFCreateKind type")
+	}
+}
+
+// UnmarshalJSON customizes the JSON unmarshalling for EOFCreateKind.
+func (e *EOFCreateKind) UnmarshalJSON(data []byte) error {
+	var aux struct {
+		Type string          `json:"type"`
+		Data json.RawMessage `json:"data"`
+	}
+
+	if err := json.Unmarshal(data, &aux); err != nil {
+		return err
+	}
+
+	switch aux.Type {
+	case "Tx":
+		var tx Tx
+		if err := json.Unmarshal(aux.Data, &tx); err != nil {
+			return err
+		}
+		e.Kind = TxK
+		e.Data = tx
+	case "Opcode":
+		var opcode Opcode
+		if err := json.Unmarshal(aux.Data, &opcode); err != nil {
+			return err
+		}
+		e.Kind = OpcodeK
+		e.Data = opcode
+	default:
+		return fmt.Errorf("unknown EOFCreateKind type: %s", aux.Type)
+	}
+
+	return nil
+}
+*/

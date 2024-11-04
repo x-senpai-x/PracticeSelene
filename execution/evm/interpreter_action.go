@@ -1,7 +1,5 @@
 package evm
 import(
-	"fmt"
-	"encoding/json"
 
 )
 type InterpreterAction struct {
@@ -19,76 +17,23 @@ type InterpreterResult struct {
 	Gas    Gas
 }
 //Check marshal unmarshal remove if not required
-type jsonInterpreterAction struct {
-	Type         string             `json:"type"`
-	CallInputs   *CallInputs        `json:"call_inputs,omitempty"`
-	CreateInputs *CreateInputs      `json:"create_inputs,omitempty"`
-	EOFInputs    *EOFCreateInputs   `json:"eof_inputs,omitempty"`
-	Result       *InterpreterResult `json:"result,omitempty"`
-}
+// type jsonInterpreterAction struct {
+// 	Type         string             `json:"type"`
+// 	CallInputs   *CallInputs        `json:"call_inputs,omitempty"`
+// 	CreateInputs *CreateInputs      `json:"create_inputs,omitempty"`
+// 	EOFInputs    *EOFCreateInputs   `json:"eof_inputs,omitempty"`
+// 	Result       *InterpreterResult `json:"result,omitempty"`
+// }
+// func(ja *jsonInterpreterAction) MarshalJSON()([]byte,error){
+// 	return marshalJSON(ja)
+// }
+// // MarshalJSON implements the json.Marshaler interface
 
-// MarshalJSON implements the json.Marshaler interface
-func (a *InterpreterAction) MarshalJSON() ([]byte, error) {
-	var jsonAction jsonInterpreterAction
-
-	switch a.actionType {
-	case ActionTypeCall:
-		jsonAction.Type = "Call"
-		jsonAction.CallInputs = a.callInputs
-	case ActionTypeCreate:
-		jsonAction.Type = "Create"
-		jsonAction.CreateInputs = a.createInputs
-	case ActionTypeEOFCreate:
-		jsonAction.Type = "EOFCreate"
-		jsonAction.EOFInputs = a.eofCreateInputs
-	case ActionTypeReturn:
-		jsonAction.Type = "Return"
-		jsonAction.Result = a.result
-	case ActionTypeNone:
-		jsonAction.Type = "None"
-	default:
-		return nil, fmt.Errorf("unknown action type: %v", a.actionType)
-	}
-
-	return json.Marshal(jsonAction)
-}
+// func (ja *jsonInterpreterAction) UnmarshalJSON(data []byte) error {
+// 	return unmarshalJSON(data,ja)
+// }
 
 // UnmarshalJSON implements the json.Unmarshaler interface
-func (a *InterpreterAction) UnmarshalJSON(data []byte) error {
-	var jsonAction jsonInterpreterAction
-	if err := json.Unmarshal(data, &jsonAction); err != nil {
-		return err
-	}
-
-	switch jsonAction.Type {
-	case "Call":
-		if jsonAction.CallInputs == nil {
-			return fmt.Errorf("Call action missing inputs")
-		}
-		*a = *NewCallAction(jsonAction.CallInputs)
-	case "Create":
-		if jsonAction.CreateInputs == nil {
-			return fmt.Errorf("Create action missing inputs")
-		}
-		*a = *NewCreateAction(jsonAction.CreateInputs)
-	case "EOFCreate":
-		if jsonAction.EOFInputs == nil {
-			return fmt.Errorf("EOFCreate action missing inputs")
-		}
-		*a = *NewEOFCreateAction(jsonAction.EOFInputs)
-	case "Return":
-		if jsonAction.Result == nil {
-			return fmt.Errorf("Return action missing result")
-		}
-		*a = *NewReturnAction(jsonAction.Result)
-	case "None":
-		*a = *NewNoneAction()
-	default:
-		return fmt.Errorf("unknown action type: %s", jsonAction.Type)
-	}
-
-	return nil
-}
 
 // ActionType represents the type of interpreter action
 type ActionType int

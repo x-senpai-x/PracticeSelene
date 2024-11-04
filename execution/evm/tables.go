@@ -26,10 +26,10 @@ type InstructionTables[H any] struct {
 //Mode contains 0 and 1
 // NewPlainInstructionTable creates an InstructionTables instance with a PlainTable.
 func NewPlainInstructionTable[H any](table InstructionTable[H]) InstructionTables[H] {
-    return InstructionTables[H]{PlainTable: &table}
+    return InstructionTables[H]{PlainTable: &table}//Mode as plaintable mode by default
 }
 
 // NewBoxedInstructionTable creates an InstructionTables instance with a BoxedTable.
 func NewBoxedInstructionTable[H any](table BoxedInstructionTable[H]) InstructionTables[H] {
-    return InstructionTables[H]{BoxedTable: &table}
+	return InstructionTables[H]{BoxedTable: &table, Mode: BoxedTableMode}
 }

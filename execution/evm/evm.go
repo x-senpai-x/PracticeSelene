@@ -1,5 +1,7 @@
 package evm
-import "bytes"
+import (
+	"bytes"
+)
 type Evm[EXT interface{}, DB Database] struct {
 	Context Context[EXT, DB]
 	Handler Handler[Context[EXT, DB], EXT, DB]
@@ -39,7 +41,13 @@ func (e *Evm[EXT, DB]) preverifyTransactionInner() (uint64, EvmError) {
 		return 0, EvmError{Message: err.Error()}
 	}
 	initialGasSpend, err := e.Handler.Validation.InitialTxGas(e.Context.Evm.Inner.Env)
+	if err != nil {
+        return 0, EvmError{Message: err.Error()}
+    }
 	err = e.Handler.Validation.TxAgainstState(&e.Context)
+	if err != nil {
+        return 0, EvmError{Message: err.Error()}
+    }
 	return initialGasSpend, EvmError{}
 }
 func (e *Evm[EXT, DB]) clear() {

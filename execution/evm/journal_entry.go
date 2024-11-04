@@ -1,8 +1,9 @@
 package evm
-import(
+import (
 	"encoding/json"
+	"fmt"
 	"math/big"
-	)
+)
 type JournalEntryType uint8
 const (
 	AccountWarmedType JournalEntryType = iota
@@ -16,21 +17,49 @@ const (
 	TransientStorageChangeType
 	CodeChangeType
 )
-
 // Creating a struct for JournalEntry containing all possible fields that might be needed
 type JournalEntry struct {
-	Type         JournalEntryType
-	Address      Address
-	Target       Address // Used for AccountDestroyed
-	WasDestroyed bool    // Used for AccountDestroyed
-	HadBalance   U256    // Used for AccountDestroyed
-	Balance      U256    // Used for BalanceTransfer
-	From         Address // Used for BalanceTransfer
-	To           Address // Used for BalanceTransfer
-	Key          U256    // Used for Storage operations
-	HadValue     U256    // Used for Storage operations
+	Type         JournalEntryType `json:"type"`
+	Address      Address          `json:"address"`
+	Target       Address          `json:"target,omitempty"`        // Used for AccountDestroyed
+	WasDestroyed bool             `json:"was_destroyed,omitempty"` // Used for AccountDestroyed
+	HadBalance   U256             `json:"had_balance,omitempty"`   // Used for AccountDestroyed
+	Balance      U256             `json:"balance,omitempty"`       // Used for BalanceTransfer
+	From         Address          `json:"from,omitempty"`          // Used for BalanceTransfer
+	To           Address          `json:"to,omitempty"`            // Used for BalanceTransfer
+	Key          U256             `json:"key,omitempty"`           // Used for Storage operations
+	HadValue     U256             `json:"had_value,omitempty"`     // Used for Storage operations
 }
+func (j JournalEntry) MarshalJSON() ([]byte, error) {
+	type Alias JournalEntry // Create an alias to avoid recursion
 
+	// Helper function to convert U256 to hex string
+	u256ToHex := func(u U256) string {
+		return fmt.Sprintf("0x%s", (*big.Int)(u).Text(16))
+	}
+
+	return json.Marshal(&struct {
+		Address    string `json:"address"`
+		Target     string `json:"target,omitempty"`
+		From       string `json:"from,omitempty"`
+		To         string `json:"to,omitempty"`
+		Key        string `json:"key,omitempty"`
+		HadBalance string `json:"had_balance,omitempty"`
+		Balance    string `json:"balance,omitempty"`
+		HadValue   string `json:"had_value,omitempty"`
+		*Alias
+	}{
+		Address:    "0x" + fmt.Sprintf("%x", j.Address[:]), // Convert to hex string
+		Target:     "0x" + fmt.Sprintf("%x", j.Target[:]),  // Convert to hex string
+		From:       "0x" + fmt.Sprintf("%x", j.From[:]),    // Convert to hex string
+		To:         "0x" + fmt.Sprintf("%x", j.To[:]),      // Convert to hex string
+		Key:        u256ToHex(j.Key),                            // Convert U256 to hex string
+		HadBalance: u256ToHex(j.HadBalance),                     // Convert U256 to hex string
+		Balance:    u256ToHex(j.Balance),                        // Convert U256 to hex string
+		HadValue:   u256ToHex(j.HadValue),                       // Convert U256 to hex string
+		Alias:      (*Alias)(&j),                                // Embed the original struct
+	})
+}
 func NewAccountWarmedEntry(address Address) *JournalEntry {
 	return &JournalEntry{
 		Type:    AccountWarmedType,
@@ -118,31 +147,4 @@ func NewCodeChangeEntry(address Address) *JournalEntry {
 		Type:    CodeChangeType,
 		Address: address,
 	}
-}
-
-// MarshalJSON implements the json.Marshaler interface
-func (j JournalEntry) MarshalJSON() ([]byte, error) {
-	return json.Marshal(struct {
-		Type         JournalEntryType `json:"type"`
-		Address      Address          `json:"address"`
-		Target       Address          `json:"target,omitempty"`
-		WasDestroyed bool             `json:"was_destroyed,omitempty"`
-		HadBalance   U256             `json:"had_balance,omitempty"`
-		Balance      U256             `json:"balance,omitempty"`
-		From         Address          `json:"from,omitempty"`
-		To           Address          `json:"to,omitempty"`
-		Key          U256             `json:"key,omitempty"`
-		HadValue     U256             `json:"had_value,omitempty"`
-	}{
-		Type:         j.Type,
-		Address:      j.Address,
-		Target:       j.Target,
-		WasDestroyed: j.WasDestroyed,
-		HadBalance:   j.HadBalance,
-		Balance:      j.Balance,
-		From:         j.From,
-		To:           j.To,
-		Key:          j.Key,
-		HadValue:     j.HadValue,
-	})
 }

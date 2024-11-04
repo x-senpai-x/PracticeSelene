@@ -31,3 +31,7 @@ type OptimismFields struct {
     IsSystemTransaction *bool   `json:"is_system_transaction,omitempty"`
     EnvelopedTx        Bytes   `json:"enveloped_tx,omitempty"`
 }
+
+func (o *OptimismFields) UnmarshalJSON(data []byte) error {
+	return unmarshalJSON(data, o)
+}

@@ -8,6 +8,9 @@ type Handler[H Host, EXT any, DB Database] struct {
 	PostExecution    PostExecutionHandler[EXT, DB]
 	Execution        ExecutionHandler[EXT, DB]
 }
+func (h *Handler[H, EXT, DB]) Validation2() (ValidationHandler[EXT, DB]) {
+	return h.Validation
+}
 func NewEvmHandler[H Host, EXT any, DB Database](cfg HandlerCfg) (*EvmHandler[H, EXT, DB], error) {
 	h := &EvmHandler[H, EXT, DB]{Cfg: cfg}
 	if h.Cfg.isOptimism {
