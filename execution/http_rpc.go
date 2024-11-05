@@ -1,9 +1,9 @@
 package execution
 
 import (
-	"strconv"
 	"encoding/hex"
 	"math/big"
+	"strconv"
 
 	seleneCommon "github.com/BlocSoc-iitr/selene/common"
 	"github.com/ethereum/go-ethereum"
@@ -70,72 +70,7 @@ func (h *HttpRpc) GetProof(address *seleneCommon.Address, slots *[]common.Hash, 
 }
 
 // TODO: CreateAccessList is throwing an error
-// There is a problem in unmarshaling the response into types.AccessList
-// TODO: CreateAccessList is throwing an error
-// There is a problem in unmarshaling the response into types.AccessList
-func (h *HttpRpc) CreateAccessList(opts CallOpts, block seleneCommon.BlockTag) (AccessList, error) {
-	resultChan := make(chan struct {
-		accessList AccessList
-		err        error
-	})
-	callOpts := struct {
-		From     string        `json:"from"`
-		To       string        `json:"to"`
-		Gas      *hexutil.Big  `json:"gas,omitempty"`
-		GasPrice *hexutil.Big  `json:"gasPrice,omitempty"`
-		Value    *hexutil.Big  `json:"value,omitempty"`
-		Data     string        `json:"data,omitempty"`
-	}{
-		From: func() string {
-			if opts.From != nil {
-				return "0x" + hex.EncodeToString(opts.From[:])
-			}
-			return ""
-		}(),
-		To: func() string {
-			if opts.To != nil {
-				return "0x" + hex.EncodeToString(opts.To[:])
-			}
-			return "" // or handle cases where `to` is missing if necessary
-		}(),
-		Gas: func() *hexutil.Big {
-			if opts.Gas != nil {
-				return (*hexutil.Big)(opts.Gas)
-			}
-			return nil
-		}(),
-		GasPrice: func() *hexutil.Big {
-			if opts.GasPrice != nil {
-				return (*hexutil.Big)(opts.GasPrice)
-			}
-			return nil
-		}(),
-		Value: func() *hexutil.Big {
-			if opts.Value != nil {
-				return (*hexutil.Big)(opts.Value)
-			}
-			return nil
-		}(),
-		Data: hex.EncodeToString(opts.Data),
-	}	
-
-	go func() {
-		var accessList AccessList
-		err := h.provider.Call(&accessList, "eth_createAccessList", callOpts, block.String())
-		resultChan <- struct {
-			accessList AccessList
-			err        error
-		}{accessList, err}
-		close(resultChan)
-	}()
-
-	result := <-resultChan
-	if result.err != nil {
-		return AccessList{}, result.err
-	}
-	return result.accessList, nil
-}
-/*
+// There is a problem in unmarshaling the response into AccessList
 func (h *HttpRpc) CreateAccessList(opts CallOpts, block seleneCommon.BlockTag) (AccessList, error) {
 	resultChan := make(chan struct {
 		accessList AccessList
@@ -154,10 +89,10 @@ func (h *HttpRpc) CreateAccessList(opts CallOpts, block seleneCommon.BlockTag) (
 
 	result := <-resultChan
 	if result.err != nil {
-		return nil, result.err
+		return AccessList{}, result.err
 	}
 	return result.accessList, nil
-}*/
+}
 
 func (h *HttpRpc) GetCode(address *seleneCommon.Address, block uint64) ([]byte, error) {
 	resultChan := make(chan struct {

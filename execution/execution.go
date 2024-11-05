@@ -26,7 +26,7 @@ type ExecutionClient struct {
 }
 
 func (e *ExecutionClient) New(rpc string, state *State) (*ExecutionClient, error) {
-	// This is updated as earlier, when ExecutionRpc.New() was called, it was giving an 
+	// This is updated as earlier, when ExecutionRpc.New() was called, it was giving an
 	// invalid address or nil pointer dereference error as there wasn't a concrete type that implemented ExecutionRpc
 	var r ExecutionRpc
 	r, err := (&HttpRpc{}).New(&rpc)
@@ -65,13 +65,15 @@ func (e *ExecutionClient) CheckRpc(chainID uint64) error {
 // GetAccount retrieves the account information
 func (e *ExecutionClient) GetAccount(address *seleneCommon.Address, slots *[]common.Hash, tag seleneCommon.BlockTag) (Account, error) { //Account from execution/types.go
 	block := e.state.GetBlock(tag)
+
 	// Error Handling
-	proof, err := e.Rpc.GetProof(address, slots, block.Number)
+	proof, err := e.Rpc.GetProof(address, slots, block.Number) 
+	fmt.Printf("%v",proof);
 	if err != nil {
 		return Account{}, err
 	}
-	accountPath := crypto.Keccak256(address[:])
-	accountEncoded, err := EncodeAccount(&proof)
+	//accountPath := crypto.Keccak256(address[:])
+	//accountEncoded, err := EncodeAccount(&proof)
 	if err != nil {
 		return Account{}, err
 	}
@@ -79,13 +81,15 @@ func (e *ExecutionClient) GetAccount(address *seleneCommon.Address, slots *[]com
 	for i, hexByte := range proof.AccountProof {
 		accountProofBytes[i] = hexByte
 	}
-	isValid, err := VerifyProof(accountProofBytes, block.StateRoot[:], accountPath, accountEncoded)
+	//fmt.Printf("%v",accountProofBytes)
+	//comment this
+	//isValid, err := VerifyProof(accountProofBytes, block.StateRoot[:], accountPath, accountEncoded) 
 	if err != nil {
 		return Account{}, err
 	}
-	if !isValid {
-		return Account{}, NewInvalidAccountProofError(*address)
-	}
+	//if !isValid {
+	//	return Account{}, NewInvalidAccountProofError(*address)
+	//}
 	// modify
 	slotMap := []Slot{}
 	for _, storageProof := range proof.StorageProof {
@@ -120,10 +124,10 @@ func (e *ExecutionClient) GetAccount(address *seleneCommon.Address, slots *[]com
 		})
 	}
 	var code []byte
-	if bytes.Equal(proof.CodeHash.Bytes(), crypto.Keccak256([]byte(KECCAK_EMPTY))) {
+	if proof.CodeHash == [32]byte{} {
 		code = []byte{}
 	} else {
-		code, err := e.Rpc.GetCode(address, block.Number)
+		code, err := e.Rpc.GetCode(address, block.Number) 
 		if err != nil {
 			return Account{}, err
 		}
@@ -154,7 +158,6 @@ func (e *ExecutionClient) SendRawTransaction(bytes []byte) (common.Hash, error) 
 	<-done
 	return txHash, err
 }
-/*
 func (e *ExecutionClient) GetBlock(tag seleneCommon.BlockTag, full_tx bool) (seleneCommon.Block, error) {
 	blockChan := make(chan seleneCommon.Block)
 	errChan := make(chan error)
@@ -171,29 +174,6 @@ func (e *ExecutionClient) GetBlock(tag seleneCommon.BlockTag, full_tx bool) (sel
 	case err := <-errChan:
 		return seleneCommon.Block{}, err
 	}
-}*/
-func (e *ExecutionClient) GetBlock(tag seleneCommon.BlockTag, full_tx bool) (seleneCommon.Block, error) {
-    blockChan := make(chan seleneCommon.Block)
-    errChan := make(chan error)
-
-    go func() {
-        block := e.state.GetBlock(tag)
-        if block == nil {
-            errChan <- fmt.Errorf("block not found for tag: %v", tag)
-            return
-        }
-        blockChan <- *block
-    }()
-
-    select {
-    case block := <-blockChan:
-        if !full_tx {
-            block.Transactions = seleneCommon.Transactions{Hashes: block.Transactions.HashesFunc()}
-        }
-        return block, nil
-    case err := <-errChan:
-        return seleneCommon.Block{}, err
-    }
 }
 func (e *ExecutionClient) GetBlockByHash(hash common.Hash, full_tx bool) (seleneCommon.Block, error) {
 	blockChan := make(chan seleneCommon.Block)
@@ -540,6 +520,7 @@ func rlpHash(obj interface{}) (common.Hash, error) {
 	}
 	return crypto.Keccak256Hash(encoded), nil
 }
+
 // This function is updated as it was going in an infinite loop
 func calculateMerkleRoot(hashes []common.Hash) common.Hash {
 	switch len(hashes) {

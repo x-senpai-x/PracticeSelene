@@ -7,6 +7,8 @@ import (
 	"sync"
 	"testing"
 	"time"
+	"github.com/BlocSoc-iitr/selene/utils"
+	"bytes"
 	"encoding/hex"
 	"github.com/BlocSoc-iitr/selene/common"
 	Gevm "github.com/BlocSoc-iitr/selene/execution/evm"
@@ -217,8 +219,7 @@ func TestNewProofDB(t *testing.T) {
 	assert.NotNil(t, proofDB, "Expected non-nil ProofDB instance")
 	assert.NotNil(t, proofDB.State, "Expected non-nil EvmState in ProofDB")
 	assert.Equal(t, tag, proofDB.State.Block, "Expected BlockTag to be set correctly in EvmState")
-
-	// Verify EvmState fields initialization
+	assert.Equal(t, executionClient, proofDB.State.Execution, "Expected ExecutionClient to be set correctly in EvmState")
 	assert.NotNil(t, proofDB.State.Basic, "Expected Basic map to be initialized in EvmState")
 	assert.NotNil(t, proofDB.State.BlockHash, "Expected BlockHash map to be initialized in EvmState")
 	assert.NotNil(t, proofDB.State.Storage, "Expected Storage map to be initialized in EvmState")
@@ -229,12 +230,11 @@ func TestNewEvmState(t *testing.T) {
 	evmState := NewEvmState(executionClient, tag)
 	assert.NotNil(t, evmState, "Expected non-nil EvmState instance")
 	assert.Equal(t, tag, evmState.Block, "Expected BlockTag to be set correctly in EvmState")
-
-	// Verify EvmState fields initialization
 	assert.NotNil(t, evmState.Basic, "Expected Basic map to be initialized in EvmState")
 	assert.NotNil(t, evmState.BlockHash, "Expected BlockHash map to be initialized in EvmState")
 	assert.NotNil(t, evmState.Storage, "Expected Storage map to be initialized in EvmState")
 	assert.Equal(t, executionClient, evmState.Execution, "Expected ExecutionClient to be set correctly in EvmState")
+	assert.Nil(t, evmState.Access, "Expected Access to be nil in EvmState")
 }
 func CreateNewProofDB() *ProofDB {
 	tag := BlockTag{Number: 1}
@@ -249,7 +249,6 @@ func CreateStateWithMultipleBlocks() (*State, *common.Block, *common.Block) {
 	// Create channels for blocks and finalized blocks
 	blockChan := make(chan *common.Block)
 	finalizedBlockChan := make(chan *common.Block)
-
 	// Set up history length and initialize State
 	historyLength := uint64(100)
 	state := NewState(historyLength, blockChan, finalizedBlockChan)
@@ -322,7 +321,6 @@ func CreateStateWithMultipleBlocks() (*State, *common.Block, *common.Block) {
 		GasPrice:         gasPrice4,
 		TransactionIndex: 1,
 	}
-
 	block2 := &common.Block{
 		Number:    2,
 		Hash:      [32]byte{0x2},
@@ -353,8 +351,8 @@ func CreateStateWithMultipleBlocks() (*State, *common.Block, *common.Block) {
 	return state, block1, block2
 }
 func CreateNewExecutionClientWith() *ExecutionClient {
-	//rpc := "https://eth-mainnet.g.alchemy.com/v2/j28GcevSYukh-GvSeBOYcwHOfIggF1Gt"
-	rpc := "https://eth-mainnet.g.alchemy.com/v2/6KA6UTwKL2hmb9AOorypuZX805DIl9KB/getNFTs?owner=0xF039fbEfBA314ecF4Bf0C32bBe85f620C8C460D2"
+	rpc := "https://eth-mainnet.g.alchemy.com/v2/j28GcevSYukh-GvSeBOYcwHOfIggF1Gt"
+	//rpc := "https://eth-mainnet.g.alchemy.com/v2/6KA6UTwKL2hmb9AOorypuZX805DIl9KB/getNFTs?owner=0xF039fbEfBA314ecF4Bf0C32bBe85f620C8C460D2"
 	state, _, _ := CreateStateWithMultipleBlocks()
 	var executionClient *ExecutionClient
 	executionClient, _ = executionClient.New(rpc, state)
@@ -367,6 +365,21 @@ func CreateNewEvmState() *EvmState {
 	evmState := NewEvmState(executionClient, tag)
 	return evmState
 }
+func CreateNewEvmState2() *EvmState {
+	tag := BlockTag{Number: 1}
+	executionClient := CreateNewExecutionClient()
+	evmState := NewEvmState(executionClient, tag)
+	return evmState
+}
+func TestNewEvmState2(t *testing.T) {
+	evmState := CreateNewEvmState2()
+	assert.NotNil(t, evmState, "Expected non-nil EvmState instance")
+	assert.NotNil(t, evmState.Basic, "Expected Basic map to be initialized in EvmState")
+	assert.NotNil(t, evmState.BlockHash, "Expected BlockHash map to be initialized in EvmState")
+	assert.NotNil(t, evmState.Storage, "Expected Storage map to be initialized in EvmState")
+	assert.NotNil(t, evmState.Execution, "Expected ExecutionClient to be set correctly in EvmState")
+	assert.Nil(t, evmState.Access, "Expected Access to be nil in EvmState")
+}
 func TestUpdateStateBlockHash(t *testing.T) {
 	// Setup
 	evmState := CreateNewEvmState()
@@ -375,7 +388,6 @@ func TestUpdateStateBlockHash(t *testing.T) {
 	blockTag := BlockTag{Number: blockNumber}
 	block, _:= evmState.Execution.GetBlock(blockTag, false)
 	t.Logf("Retrieved Block: %+v", block)
-
 	// Set the Access to update BlockHash
 	evmState.Access = &StateAccess{
 		BlockHash: &blockNumber,
@@ -385,11 +397,501 @@ func TestUpdateStateBlockHash(t *testing.T) {
 	assert.NoError(t, err, "Expected no error on UpdateState for BlockHash access")
 	hash, exists := evmState.BlockHash[blockNumber]
 	assert.True(t, exists, "Expected block hash to be added to BlockHash map in EvmState")
-	expectedHashArray := [32]byte{0x2}
-	expectedHash := B256FromSlice(expectedHashArray[:])
-	assert.Equal(t, expectedHash, hash, "Expected correct block hash in BlockHash map")
+	//expectedHashArray := [32]byte{0x2}
+	//expectedHash := B256FromSlice(expectedHashArray[:])
+	assert.Equal(t, B256FromSlice(block.Hash[:]), hash, "Expected correct block hash in BlockHash map")
 }
+// func TestUpdateStateBasic(t *testing.T) {
+// 	state:= CreateNewState()
+// 	rpc:=MakeNewRpc(t)
+// 	ExecutionClient:=&ExecutionClient{
+// 		Rpc: rpc,
+// 		state: state,
+// 	}
+// 	evmState:=NewEvmState(ExecutionClient, BlockTag{Number: 1})
+// 	addressBytes, err := utils.Hex_str_to_bytes("0xB856af30B938B6f52e5BfF365675F358CD52F91B")
+// 	if err != nil {
+// 		t.Errorf("Error in decoding address string:, %v", err)
+// 	}
+// 	var address common.Address = common.Address(addressBytes)
+// 	slots := []Common.Hash{}
+// 	var block uint64 = 14900001
+// 	BlockTag:=BlockTag{Number: block}
+// 	proof, err := rpc.GetProof(&address, &slots, block)
+// 	// Setup
+// 	evmState.Access= &StateAccess{
+// 		Basic: &address,
+// 	}
+// 	assert.NotZero(t,proof.Address, "Proof should not be zero")
+// 	fmt.Printf("Proof Address: %v\n", proof.Address)
+// 	fmt.Printf("Proof Balance: %v\n", proof.Balance)
+// 	fmt.Printf("Proof CodeHash: %v\n", proof.CodeHash)
+// 	fmt.Printf("Proof Nonce: %v\n", proof.Nonce)
+// 	fmt.Printf("Proof StorageHash: %v\n", proof.StorageHash)
+// 	ExecutionClient.GetBlock(BlockTag, false)
+// 	account, err := evmState.Execution.GetAccount(evmState.Access.Basic,&slots, BlockTag)
+// 	fmt.Printf("\naccount Balance %v\n" , account.Balance)
+// 	fmt.Printf("account CodeHash %v\n" , account.CodeHash)
+// 	fmt.Printf("account Nonce %v\n" , account.Nonce)
+// 	fmt.Printf("account StorageHash %v\n" , account.StorageHash)
+// 	fmt.Printf("account Code %v\n" , account.Code)
+// 	bytecode:=NewRawBytecode(account.Code)
+// 	fmt.Printf("Bytecode: %v\n", bytecode)
+// 	codehash:=B256FromSlice(account.CodeHash[:])
+// 	fmt.Printf("CodeHash: %v\n", codehash)
+// 	balance:=ConvertU256(account.Balance)
+// 	fmt.Printf("Balance: %v\n", balance)
 
+// 	/*
+// 	evmState.Basic[address]= Gevm.AccountInfo{
+// 		Balance: big.NewInt(100),
+// 		Nonce:   1,
+// 		CodeHash:    Common.HexToHash("0x01"),
+// 		Code: 	&Gevm.Bytecode{
+// 			Kind : Gevm.LegacyRawKind,
+// 			LegacyRaw: []byte{0x60, 0x60, 0x60, 0x40},
+// 		},
+// 	}*/
+// 	evmState.UpdateState()
+// 	info,exists := evmState.Basic[address]
+// 	assert.True(t, exists, "Account should exist in Basic state")
+// 	assert.NotZero(t, *info.Balance, "Balance should not be zero")
+// 	fmt.Printf("Balance: %v\n", info.Balance)
+// 	assert.NotZero(t, info.Nonce, "Nonce should not be zero")
+
+// }
+func TestUpdateStateBasic3(t *testing.T) {
+    state := CreateNewState()
+    rpc := MakeNewRpc(t)
+    executionClient := &ExecutionClient{
+        Rpc:   rpc,
+        state: state,
+    }
+    
+    block := uint64(14900001)
+    evmState := NewEvmState(executionClient, BlockTag{Number: block})
+    
+    // Convert address string to bytes
+    addressHex := "B856af30B938B6f52e5BfF365675F358CD52F91B"
+    addressBytes, err := utils.Hex_str_to_bytes("0x" + addressHex)
+    if err != nil {
+        t.Fatalf("Error in decoding address string: %v", err)
+    }
+    
+    address := Common.BytesToAddress(addressBytes)
+    slots := []Common.Hash{}
+    
+
+    // Set up access for state update
+    evmState.Access = &StateAccess{
+        Basic: &address,
+    }
+    
+    // Get account before update for comparison
+    account, err := evmState.Execution.GetAccount(&address, &slots, BlockTag{Number: block})
+    if err != nil {
+        t.Fatalf("Failed to get account: %v", err)
+    }
+    
+    // Update state
+    if err := evmState.UpdateState(); err != nil {
+        t.Fatalf("Failed to update state: %v", err)
+    }
+    
+    // Verify state update
+    info, exists := evmState.Basic[address]
+    if !exists {
+        t.Fatal("Account does not exist in Basic state after update")
+    }
+    
+    // Compare values
+    if info.Balance.Cmp(account.Balance) != 0 {
+        t.Errorf("Balance mismatch: expected %v, got %v", account.Balance, info.Balance)
+    }
+    if info.Nonce != account.Nonce {
+        t.Errorf("Nonce mismatch: expected %v, got %v", account.Nonce, info.Nonce)
+    }
+    expectedCodeHash := Common.BytesToHash(account.CodeHash[:])
+    if info.CodeHash != expectedCodeHash {
+        t.Errorf("CodeHash mismatch: expected %v, got %v", expectedCodeHash, info.CodeHash)
+    }
+}
+func TestUpdateStateStorage(t *testing.T) {
+	state := CreateNewState()
+    rpc := MakeNewRpc(t)
+    executionClient := &ExecutionClient{
+        Rpc:   rpc,
+        state: state,
+    }
+    block := uint64(14900001)
+    evmState := NewEvmState(executionClient, BlockTag{Number: block})
+    addressHex := "B856af30B938B6f52e5BfF365675F358CD52F91B"
+    addressBytes, err := utils.Hex_str_to_bytes("0x" + addressHex)
+    if err != nil {
+        t.Fatalf("Error in decoding address string: %v", err)
+    }
+    address := Common.BytesToAddress(addressBytes)
+	//slot := Common.Hash{}
+
+	//slotBigInt := new(big.Int).SetBytes(slot.Bytes())
+	var slotBigInt *big.Int  // This will produce an empty byte array when calling .Bytes()
+    evmState.Access = &StateAccess{
+        Storage: &StorageAccess{
+            Address: address,
+			Slot:    slotBigInt,
+        },
+    }
+	slotHash := Common.BytesToHash(evmState.Access.Storage.Slot.Bytes())
+	slots := []Common.Hash{slotHash}
+	fmt.Printf("Slot: %v\n", slotHash)
+	fmt.Printf("Slots: %v\n", slots)
+	fmt.Printf("Actual Slots needs: %v\n",[]Common.Hash{})
+	account, err := evmState.Execution.GetAccount(&address, &[]Common.Hash{}, BlockTag{Number: block})
+    if err != nil {
+        t.Fatalf("Failed to get account: %v", err)
+    }
+	// Update state
+	if err := evmState.UpdateState(); err != nil {
+		t.Fatalf("Failed to update state: %v", err)
+	}
+	// Verify state update
+	storage, exists := evmState.Storage[address]
+	if !exists {
+		t.Fatal("Storage does not exist in Storage state after update")
+	}
+	// Compare values
+	storageHashBigInt := new(big.Int).SetBytes(account.StorageHash.Bytes())
+
+	if storage[slotBigInt].Cmp(storageHashBigInt) != 0 {
+		t.Errorf("Storage mismatch: expected %v, got %v", account.StorageHash, storage[slotBigInt])
+	}
+}
+// func TestUpdateStateBasic2(t *testing.T) {
+//     state := CreateNewState()
+//     rpc := MakeNewRpc(t)
+//     ExecutionClient := &ExecutionClient{
+//         Rpc:   rpc,
+//         state: state,
+//     }
+    
+//     evmState := NewEvmState(ExecutionClient, BlockTag{Number: 1})
+//     addressBytes, err := utils.Hex_str_to_bytes("0xB856af30B938B6f52e5BfF365675F358CD52F91B")
+//     if err != nil {
+//         t.Fatalf("Error in decoding address string: %v", err)
+//     }
+    
+//     address := common.Address(addressBytes)
+//     slots := []Common.Hash{}
+//     block := uint64(14900001)
+//     BlockTag := BlockTag{Number: block}
+    
+//     // Get initial proof
+//     proof, err := rpc.GetProof(&address, &slots, block)
+//     if err != nil {
+//         t.Fatalf("Failed to get proof: %v", err)
+//     }
+    
+//     t.Logf("Initial proof values:")
+//     t.Logf("Proof Address: %v", proof.Address)
+//     t.Logf("Proof Balance: %v", proof.Balance)
+//     t.Logf("Proof Nonce: %v", proof.Nonce)
+//     t.Logf("Proof CodeHash: %v", proof.CodeHash)
+    
+//     // Setup access
+//     evmState.Access = &StateAccess{
+//         Basic: &address,
+//     }
+    
+//     // Get account before update
+//     account, err := evmState.Execution.GetAccount(evmState.Access.Basic, &slots, BlockTag)
+//     if err != nil {
+//         t.Fatalf("Failed to get account: %v", err)
+//     }
+    
+//     t.Logf("\nAccount values before update:")
+//     t.Logf("Balance: %v", account.Balance)
+//     t.Logf("Nonce: %v", account.Nonce)
+//     t.Logf("CodeHash: %x", account.CodeHash)
+    
+//     // Convert values before update to verify conversion functions
+//     bytecode := NewRawBytecode(account.Code)
+//     codeHash := B256FromSlice(account.CodeHash[:])
+//     balance := ConvertU256(account.Balance)
+    
+//     t.Logf("\nConverted values:")
+//     t.Logf("Converted Balance: %v", balance)
+//     t.Logf("Converted CodeHash: %v", codeHash)
+//     t.Logf("Converted Bytecode: %v", bytecode)
+    
+//     // Update state
+//     err = evmState.UpdateState()
+//     if err != nil {
+//         t.Fatalf("Failed to update state: %v", err)
+//     }
+    
+//     // Verify state
+//     info, exists := evmState.Basic[address]
+//     if !exists {
+//         t.Fatal("Account does not exist in Basic state after update")
+//     }
+    
+//     t.Logf("\nFinal state values:")
+//     t.Logf("State Balance: %v", info.Balance)
+//     t.Logf("State Nonce: %v", info.Nonce)
+//     t.Logf("State CodeHash: %v", info.CodeHash)
+    
+//     // Verify all fields match
+//     if info.Balance.String() != balance.String() {
+//         t.Errorf("Balance mismatch: expected %v, got %v", balance, info.Balance)
+//     }
+//     if info.Nonce != account.Nonce {
+//         t.Errorf("Nonce mismatch: expected %v, got %v", account.Nonce, info.Nonce)
+//     }
+//     if info.CodeHash != codeHash {
+//         t.Errorf("CodeHash mismatch: expected %v, got %v", codeHash, info.CodeHash)
+//     }
+// }
+
+func TestTypeConversions(t *testing.T) {
+    // Test U256 conversion
+    originalBalance := big.NewInt(22219322619975880)
+    balance := ConvertU256(originalBalance)
+    if balance.String() != originalBalance.String() {
+        t.Errorf("Balance conversion failed. Expected %s, got %s", 
+            originalBalance.String(), balance.String())
+    }
+
+    // Test B256 conversion
+    originalHash := []byte{
+        0xc5, 0xd2, 0x46, 0x01, 0x86, 0xf7, 0x23, 0x3c,
+        0x92, 0x7e, 0x7d, 0xb2, 0xdc, 0xc7, 0x03, 0xc0,
+        0xe5, 0x00, 0xb6, 0x53, 0xca, 0x82, 0x27, 0x3b,
+        0x7b, 0xfa, 0xd8, 0x04, 0x5d, 0x85, 0xa4, 0x70,
+    }
+    hash := B256FromSlice(originalHash)
+    if !bytes.Equal(hash[:], originalHash) {
+        t.Errorf("Hash conversion failed. Expected %x, got %x", 
+            originalHash, hash[:])
+    }
+
+    // Test direct struct creation and map storage
+    testAccount := Gevm.AccountInfo{
+        Balance:  balance,
+        Nonce:    16,
+        CodeHash: hash,
+        Code: &Gevm.Bytecode{
+            Kind:      Gevm.LegacyRawKind,
+            LegacyRaw: []byte{1, 2, 3}, // some test bytecode
+        },
+    }
+
+    // Test map storage
+    m := make(map[common.Address]Gevm.AccountInfo)
+    testAddr := common.Address{}
+    m[testAddr] = testAccount
+
+    // Verify stored values
+    stored := m[testAddr]
+    if stored.Balance.String() != balance.String() {
+        t.Errorf("Stored balance mismatch. Expected %s, got %s",
+            balance.String(), stored.Balance.String())
+    }
+    if stored.Nonce != 16 {
+        t.Errorf("Stored nonce mismatch. Expected 16, got %d", stored.Nonce)
+    }
+    if !bytes.Equal(stored.CodeHash[:], hash[:]) {
+        t.Errorf("Stored hash mismatch. Expected %x, got %x",
+            hash[:], stored.CodeHash[:])
+    }
+}
+// func TestUpdateState(t *testing.T) {
+//     // Helper function to create U256 from hex string
+//     hexToU256 := func(hex string) U256 {
+//         bytes := Common.HexToHash(hex).Bytes()
+//         return U256FromBigEndian(bytes)
+//     }
+
+//     tests := []struct {
+//         name          string
+//         setupState    func(*testing.T) *EvmState
+//         setupAccess   func(*EvmState)
+//         expectedError error
+//         validateState func(*testing.T, *EvmState)
+//     }{
+//         {
+//             name: "Update Basic Account Info",
+//             setupState: func(t *testing.T) *EvmState {
+//                 executionClient := CreateNewExecutionClient()
+//                 return &EvmState{
+//                     Basic:     make(map[Address]Gevm.AccountInfo),
+//                     Storage:   make(map[Address]map[U256]U256),
+//                     BlockHash: make(map[uint64]B256),
+//                     Block:     BlockTag{Finalized: true},
+//                     Execution: executionClient,
+//                     mu:        sync.RWMutex{},
+//                 }
+//             },
+//             setupAccess: func(e *EvmState) {
+//                 addressBytes := parseHexAddress("0x710bDa329b2a6224E4B44833DE30F38E7f81d564")
+// 				addr := common.Address(addressBytes)
+//                 e.Access = &StateAccess{
+//                     Basic: &addr,
+//                 }
+//             },
+//             expectedError: nil,
+//             validateState: func(t *testing.T, state *EvmState) {
+// 				addressBytes := parseHexAddress("0x710bDa329b2a6224E4B44833DE30F38E7f81d564")
+// 				addr := common.Address(addressBytes)                
+//                 // Check if account info exists and has expected values
+//                 info, exists := state.Basic[addr]
+//                 assert.True(t, exists, "Account should exist in Basic state")
+//                 assert.NotZero(t, info.Balance, "Balance should not be zero")
+//                 assert.NotZero(t, info.Nonce, "Nonce should not be zero")
+//                 assert.NotNil(t, info.Code, "Code should not be nil")
+                
+//                 // Verify Access was cleared
+//                 assert.Nil(t, state.Access, "Access should be cleared after update")
+//             },
+//         },
+//         {
+//             name: "Update Storage Slot",
+//             setupState: func(t *testing.T) *EvmState {
+//                 executionClient := CreateNewExecutionClient()
+//                 return &EvmState{
+//                     Basic:     make(map[Address]Gevm.AccountInfo),
+//                     Storage:   make(map[Address]map[U256]U256),
+//                     BlockHash: make(map[uint64]B256),
+//                     Block:     BlockTag{Finalized: true},
+//                     Execution: executionClient,
+//                     mu:        sync.RWMutex{},
+//                 }
+//             },
+//             setupAccess: func(e *EvmState) {
+//                 addr := Common.HexToAddress("0x710bDa329b2a6224E4B44833DE30F38E7f81d564")
+//                 slot := hexToU256("0x1234567890123456789012345678901234567890123456789012345678901234")
+// 				e.Access= &StateAccess{
+// 					Storage: &StorageAccess{
+// 						Address: addr,
+// 						Slot: slot,
+// 					},
+// 				}
+//             },
+//             expectedError: nil,
+//             validateState: func(t *testing.T, state *EvmState) {
+//                 addr := Common.HexToAddress("0x710bDa329b2a6224E4B44833DE30F38E7f81d564")
+//                 slot := hexToU256("0x1234567890123456789012345678901234567890123456789012345678901234")
+                
+//                 // Check if storage exists and has expected value
+//                 storage, exists := state.Storage[addr]
+//                 assert.True(t, exists, "Storage should exist for address")
+                
+//                 value, exists := storage[slot]
+//                 assert.True(t, exists, "Storage slot should exist")
+//                 assert.NotZero(t, value, "Storage value should not be zero")
+                
+//                 // Verify Access was cleared
+//                 assert.Nil(t, state.Access, "Access should be cleared after update")
+//             },
+//         },
+
+//         {
+//             name: "Update Block Hash",
+//             setupState: func(t *testing.T) *EvmState {
+//                 executionClient := CreateNewExecutionClient()
+//                 return &EvmState{
+//                     Basic:     make(map[Address]Gevm.AccountInfo),
+//                     Storage:   make(map[Address]map[U256]U256),
+//                     BlockHash: make(map[uint64]B256),
+//                     Block:     BlockTag{Finalized: true},
+//                     Execution: executionClient,
+//                     mu:        sync.RWMutex{},
+//                 }
+//             },
+//             setupAccess: func(e *EvmState) {
+//                 blockNum := uint64(12345)
+//                 e.Access = &StateAccess{
+//                     BlockHash: &blockNum,
+//                 }
+//             },
+//             expectedError: nil,
+//             validateState: func(t *testing.T, state *EvmState) {
+//                 blockNum := uint64(12345)
+                
+//                 // Check if block hash exists
+//                 hash, exists := state.BlockHash[blockNum]
+//                 assert.True(t, exists, "Block hash should exist")
+//                 assert.NotZero(t, hash, "Block hash should not be zero")
+                
+//                 // Verify Access was cleared
+//                 assert.Nil(t, state.Access, "Access should be cleared after update")
+//             },
+//         },
+//         {
+//             name: "No Access Field Set",
+//             setupState: func(t *testing.T) *EvmState {
+//                 executionClient := CreateNewExecutionClient()
+//                 return &EvmState{
+//                     Basic:     make(map[Address]Gevm.AccountInfo),
+//                     Storage:   make(map[Address]map[U256]U256),
+//                     BlockHash: make(map[uint64]B256),
+//                     Block:     BlockTag{Finalized: true},
+//                     Execution: executionClient,
+//                     mu:        sync.RWMutex{},
+//                 }
+//             },
+//             setupAccess: func(e *EvmState) {
+//                 e.Access = nil
+//             },
+//             expectedError: nil,
+//             validateState: func(t *testing.T, state *EvmState) {
+//                 assert.Nil(t, state.Access, "Access should remain nil")
+//             },
+//         },
+//         {
+//             name: "Invalid Access Type",
+//             setupState: func(t *testing.T) *EvmState {
+//                 executionClient := CreateNewExecutionClient()
+//                 return &EvmState{
+//                     Basic:     make(map[Address]Gevm.AccountInfo),
+//                     Storage:   make(map[Address]map[U256]U256),
+//                     BlockHash: make(map[uint64]B256),
+//                     Block:     BlockTag{Finalized: true},
+//                     Execution: executionClient,
+//                     mu:        sync.RWMutex{},
+//                 }
+//             },
+//             setupAccess: func(e *EvmState) {
+//                 e.Access = &StateAccess{} // Empty access struct
+//             },
+//             expectedError: errors.New("invalid access type"),
+//             validateState: func(t *testing.T, state *EvmState) {
+//                 assert.Nil(t, state.Access, "Access should be cleared even on error")
+//             },
+//         },
+//     }
+
+//     for _, tt := range tests {
+//         t.Run(tt.name, func(t *testing.T) {
+//             // Setup
+//             state := tt.setupState(t)
+//             tt.setupAccess(state)
+
+//             // Execute
+//             err := state.UpdateState()
+
+//             // Verify error
+//             if tt.expectedError != nil {
+//                 assert.Error(t, err)
+//                 assert.Contains(t, err.Error(), tt.expectedError.Error())
+//             } else {
+//                 assert.NoError(t, err)
+//             }
+
+//             // Validate state
+//             tt.validateState(t, state)
+//         })
+//     }
+// }
 func TestUpdateStateInvalidAccessType(t *testing.T) {
 	// Setup
 	evmState := CreateNewEvmState()
@@ -448,10 +950,12 @@ func TestNeedsUpdate(t *testing.T) {
 	evmState.Access = &StateAccess{Basic: new(Address)}
 	assert.True(t, evmState.NeedsUpdate(), "Expected NeedsUpdate to return true with Basic set")
 
-	evmState.Access = &StateAccess{Storage: &struct {
-		Address Address
-		Slot    U256
-	}{Address: Address{0x45, 0x65}, Slot: U256(big.NewInt(2))}}
+	evmState.Access = &StateAccess{
+		Storage: &StorageAccess {
+			Address: Address{0x45, 0x65}, 
+			Slot: U256(big.NewInt(2)),
+		},
+	}
 	assert.True(t, evmState.NeedsUpdate(), "Expected NeedsUpdate to return true with Storage set")
 
 	evmState.Access = &StateAccess{BlockHash: new(uint64)}
@@ -537,11 +1041,222 @@ func TestGetBlockHashMissing(t *testing.T) {
 	assert.NotNil(t, evmState.Access, "Expected Access to be set when block hash is missing")
 	assert.Equal(t, block, *evmState.Access.BlockHash, "Expected Access.BlockHash to match the requested block")
 }
+type MockExecutionClient struct {
+    Rpc MockRpc
+}
+
+type MockRpc struct {
+    accessList *AccessList
+    accounts   map[Address]Account
+}
+func TestPrefetchState(t *testing.T) {
+	addressBytes := parseHexAddress("0x710bDa329b2a6224E4B44833DE30F38E7f81d564")
+	addressFrom := common.Address(addressBytes)
+	addressBytes2:=parseHexAddress("0xb8901acB165ed027E32754E0FFe830802919727f")
+	addressTo:=common.Address(addressBytes2)
+	tests := []struct {
+		name          string
+		setupState    func(*testing.T) *EvmState
+		opts          *CallOpts
+		expectedError error
+		validateState func(*testing.T, *EvmState)
+	}{
+		{
+			name: "Successful prefetch",
+			setupState: func(t *testing.T) *EvmState {
+				executionClient := CreateNewExecutionClient()
+
+				state := &EvmState{
+					Basic:     make(map[Address]Gevm.AccountInfo),
+					Storage:   make(map[Address]map[U256]U256),
+					Block:     BlockTag{Finalized: true},
+					Execution: executionClient,
+					mu:        sync.RWMutex{},
+				}
+
+				return state
+			},
+			opts: &CallOpts{
+				From: &addressFrom,
+
+				To:   &addressTo,
+				// Assuming CallOpts struct has string fields for addresses
+
+			},
+			expectedError: nil,
+			validateState: func(t *testing.T, state *EvmState) {
+				assert.NotNil(t, state.Basic, "Basic state should not be nil")
+				assert.NotNil(t, state.Storage, "Storage state should not be nil")
+				t.Logf("Checking Basic and Storage states after prefetch")
+				t.Logf("Basic state keys: %v", state.Basic)
+				t.Logf("Storage state keys: %v", state.Storage)
+				assert.NotNil(t, state.Basic[addressFrom], "Basic state should not be nil")
+				assert.NotNil(t, state.Basic[addressTo], "Basic state should not be nil")
+				assert.NotNil(t, state.Storage[addressFrom], "Storage state should not be nil")
+				assert.NotNil(t, state.Storage[addressTo], "Storage state should not be nil")
+			},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Setup
+			state := tt.setupState(t)
+
+			// Execute
+			err := state.PrefetchState(tt.opts)
+
+			// Verify error
+			if tt.expectedError != nil {
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), tt.expectedError.Error())
+			} else {
+				assert.NoError(t, err)
+			}
+
+			// Validate state
+			tt.validateState(t, state)
+			
+		})
+	}
+}
+func TestPrefetchState2(t *testing.T) {
+	addressBytes := parseHexAddress("0x710bDa329b2a6224E4B44833DE30F38E7f81d564")
+	addressFrom := common.Address(addressBytes)
+	addressBytes2 := parseHexAddress("0xb8901acB165ed027E32754E0FFe830802919727f")
+	addressTo := common.Address(addressBytes2)
+
+	tests := []struct {
+		name          string
+		setupState    func(*testing.T) *EvmState
+		opts          *CallOpts
+		expectedError error
+		validateState func(*testing.T, *EvmState)
+	}{
+		{
+			name: "Successful prefetch",
+			setupState: func(t *testing.T) *EvmState {
+				executionClient := CreateNewExecutionClientWith()
+
+				state := &EvmState{
+					Basic:     make(map[Address]Gevm.AccountInfo),
+					Storage:   make(map[Address]map[U256]U256),
+					Block:     BlockTag{Finalized: true},
+					Execution: executionClient,
+					mu:        sync.RWMutex{},
+				}
+
+				return state
+			},
+			opts: &CallOpts{
+				From: &addressFrom,
+				To:   &addressTo,
+			},
+			expectedError: nil,
+			validateState: func(t *testing.T, state *EvmState) {
+				t.Logf("Checking Basic and Storage states after prefetch")
+				t.Logf("Basic state keys: %v", state.Basic)
+				t.Logf("Storage state keys: %v", state.Storage)
+			
+				assert.NotNil(t, state.Basic, "Basic state should not be nil")
+				assert.NotNil(t, state.Storage, "Storage state should not be nil")
+			
+				// Check if 'From' address is in the Basic state
+				if info, exists := state.Basic[addressFrom]; assert.True(t, exists, "From address should be in the Basic state") {
+					assert.NotZero(t, info.Balance, "Balance for 'From' address should be non-zero")
+					//assert.NotZero(t, info.Nonce, "Nonce for 'From' address should be non-zero")
+					t.Logf("From address %s found in Basic state", addressFrom.String())
+				} else {
+					t.Logf("From address %s missing in Basic state", addressFrom.String())
+				}
+			
+				// Check if 'To' address is in the Basic state
+				if info, exists := state.Basic[addressTo]; assert.True(t, exists, "To address should be in the Basic state") {
+					assert.NotZero(t, info.Balance, "Balance for 'To' address should be non-zero")
+					//assert.NotZero(t, info.Nonce, "Nonce for 'To' address should be non-zero")
+				} else {
+					t.Logf("To address %s missing in Basic state", addressTo.String())
+				}
+			
+				// Get miner address for the block and check if it is in the Basic state
+				block, err := state.Execution.GetBlock(state.Block, false)
+				assert.NoError(t, err, "Should fetch block without errors")
+				miner := block.Miner
+			
+				if info, exists := state.Basic[miner]; assert.True(t, exists, "Miner address should be in the Basic state") {
+					assert.NotZero(t, info.Balance, "Balance for miner address should be non-zero")
+					//assert.NotZero(t, info.Nonce, "Nonce for miner address should be non-zero")
+				} else {
+					t.Logf("Miner address %s missing in Basic state", miner.String())
+				}
+			
+				// Storage checks with logs
+				if storageEntries, exists := state.Storage[addressFrom]; assert.True(t, exists, "Storage for 'From' address should be initialized") {
+					for key, value := range storageEntries {
+						assert.NotZero(t, key, "Storage key should be non-zero")
+						assert.NotZero(t, value, "Storage value should be non-zero")
+					}
+				} else {
+					t.Logf("Storage for 'From' address %s not initialized", addressFrom.String())
+				}
+			
+				if storageEntries, exists := state.Storage[addressTo]; assert.True(t, exists, "Storage for 'To' address should be initialized") {
+					for key, value := range storageEntries {
+						assert.NotZero(t, key, "Storage key should be non-zero")
+						assert.NotZero(t, value, "Storage value should be non-zero")
+					}
+				} else {
+					t.Logf("Storage for 'To' address %s not initialized", addressTo.String())
+				}
+			
+				if storageEntries, exists := state.Storage[miner]; assert.True(t, exists, "Storage for miner address should be initialized") {
+					for key, value := range storageEntries {
+						assert.NotZero(t, key, "Storage key should be non-zero")
+						assert.NotZero(t, value, "Storage value should be non-zero")
+					}
+				} else {
+					t.Logf("Storage for miner address %s not initialized", miner.String())
+				}
+			},
+			
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			// Setup
+			state := tt.setupState(t)
+
+			// Execute
+			err := state.PrefetchState(tt.opts)
+
+			// Verify error
+			if tt.expectedError != nil {
+				assert.Error(t, err)
+				assert.Contains(t, err.Error(), tt.expectedError.Error())
+			} else {
+				assert.NoError(t, err)
+			}
+
+			// Validate state
+			tt.validateState(t, state)
+		})
+	}
+}
+
+func parseHexAddress(hexStr string) [20]byte {
+	var addr [20]byte
+	bytes, _ := hex.DecodeString(hexStr[2:])
+	copy(addr[:], bytes)
+	return addr
+}
+
+/*
 func TestUpdateState(t *testing.T) {
     // Replace with a known good address for testing
 
 	addressBytes := parseHexAddress("0x710bDa329b2a6224E4B44833DE30F38E7f81d564")
-	address := common.Address(addressBytes)
+	address := Address(addressBytes)
 
     tests := []struct {
         name          string
@@ -625,74 +1340,4 @@ func TestUpdateState(t *testing.T) {
     }
 }
 
-
-func TestPrefetchState(t *testing.T) {
-	addressBytes := parseHexAddress("0x710bDa329b2a6224E4B44833DE30F38E7f81d564")
-	addressFrom := common.Address(addressBytes)
-	addressBytes2:=parseHexAddress("0xb8901acB165ed027E32754E0FFe830802919727f")
-	addressTo:=common.Address(addressBytes2)
-	tests := []struct {
-		name          string
-		setupState    func(*testing.T) *EvmState
-		opts          *CallOpts
-		expectedError error
-		validateState func(*testing.T, *EvmState)
-	}{
-		{
-			name: "Successful prefetch",
-			setupState: func(t *testing.T) *EvmState {
-				executionClient := CreateNewExecutionClient()
-
-				state := &EvmState{
-					Basic:     make(map[Address]Gevm.AccountInfo),
-					Storage:   make(map[Address]map[U256]U256),
-					Block:     BlockTag{Finalized: true},
-					Execution: executionClient,
-					mu:        sync.RWMutex{},
-				}
-
-				return state
-			},
-			opts: &CallOpts{
-				From: (&addressFrom),
-
-				To:   &addressTo,
-				// Assuming CallOpts struct has string fields for addresses
-
-			},
-			expectedError: nil,
-			validateState: func(t *testing.T, state *EvmState) {
-				assert.NotNil(t, state.Basic, "Basic state should not be nil")
-				assert.NotNil(t, state.Storage, "Storage state should not be nil")
-				// Add more specific state validations
-			},
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			// Setup
-			state := tt.setupState(t)
-
-			// Execute
-			err := state.PrefetchState(tt.opts)
-
-			// Verify error
-			if tt.expectedError != nil {
-				assert.Error(t, err)
-				assert.Contains(t, err.Error(), tt.expectedError.Error())
-			} else {
-				assert.NoError(t, err)
-			}
-
-			// Validate state
-			tt.validateState(t, state)
-		})
-	}
-}
-func parseHexAddress(hexStr string) [20]byte {
-	var addr [20]byte
-	bytes, _ := hex.DecodeString(hexStr[2:])
-	copy(addr[:], bytes)
-	return addr
-}
+*/

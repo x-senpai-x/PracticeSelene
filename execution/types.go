@@ -3,7 +3,7 @@ package execution
 import (
 	"encoding/json"
 	"fmt"
-	seleneCommon "github.com/BlocSoc-iitr/selene/common"
+	//seleneCommon "github.com/BlocSoc-iitr/selene/common"
 	"github.com/BlocSoc-iitr/selene/utils"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/common/hexutil"
@@ -12,7 +12,7 @@ import (
 	"reflect"
 )
 type AccessListItem struct {
-	Address     seleneCommon.Address 
+	Address     common.Address 
 	StorageKeys []B256
 }
 type AccessList struct {
@@ -56,8 +56,8 @@ type Slot struct {
 	Value *big.Int    // The value (storage value)
 }
 type CallOpts struct {
-	From     *seleneCommon.Address `json:"from,omitempty"`
-	To       *seleneCommon.Address `json:"to,omitempty"`
+	From     *common.Address `json:"from,omitempty"`
+	To       *common.Address `json:"to,omitempty"`
 	Gas      *big.Int        `json:"gas,omitempty"`
 	GasPrice *big.Int        `json:"gasPrice,omitempty"`
 	Value    *big.Int        `json:"value,omitempty"`

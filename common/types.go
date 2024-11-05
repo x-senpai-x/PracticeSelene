@@ -9,10 +9,8 @@ import (
 	"github.com/ethereum/go-ethereum/common/hexutil"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/holiman/uint256"
-	"errors"
-	"encoding/hex"
 )
-type Address [20]byte
+type Address = common.Address
 type Block struct {
 	Number           uint64
 	BaseFeePerGas    uint256.Int
@@ -155,6 +153,7 @@ func parseDecimalUint64(decStr string) (uint64, error) {
 
 // Example error structs can be defined here
 // type BlockNotFoundError struct {}
+/*
 func (a *Address) UnmarshalJSON(data []byte) error {
     // Expecting a JSON string like `"0x1234567890abcdef1234567890abcdef12345678"`
     if len(data) != 42+2 { // 2 for the surrounding quotes, 42 for the 0x-prefixed address
@@ -176,4 +175,4 @@ func (a *Address) UnmarshalJSON(data []byte) error {
 
     copy(a[:], decoded)
     return nil
-}
+}*/
